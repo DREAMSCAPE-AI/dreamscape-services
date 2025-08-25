@@ -267,6 +267,53 @@ router.post('/change-password', authenticateToken, changePasswordValidation, asy
 });
 
 /**
+ * @route   POST /api/v1/auth/refresh
+ * @desc    Refresh access token using refresh token
+ * @access  Private (refresh token required)
+ */
+router.post('/refresh', authenticateRefreshToken, async (req: AuthRequest, res: express.Response) => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
+      });
+      return;
+    }
+
+    const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
+    
+    if (!refreshToken) {
+      res.status(401).json({
+        success: false,
+        message: 'Refresh token not provided'
+      });
+      return;
+    }
+
+    const result = await AuthService.refreshToken(refreshToken);
+    
+    if (result.success && result.data) {
+      // Set new refresh token as secure cookie
+      setRefreshTokenCookie(res, result.data.tokens.refreshToken, false);
+      
+      // Remove refresh token from response body
+      const { refreshToken: newRefreshToken, ...tokensWithoutRefresh } = result.data.tokens;
+      result.data.tokens = tokensWithoutRefresh as any;
+    }
+    
+    const statusCode = result.success ? 200 : 401;
+    res.status(statusCode).json(result);
+  } catch (error) {
+    console.error('Refresh token route error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+/**
  * @route   POST /api/auth/verify-token
  * @desc    Verify if token is valid
  * @access  Private

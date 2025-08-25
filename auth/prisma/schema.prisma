@@ -185,6 +185,7 @@ enum UserCategory {
   LEISURE
   BUSINESS
 }
+
 model Session {
   id        String   @id @default(uuid())
   token     String   @unique

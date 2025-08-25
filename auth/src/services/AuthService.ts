@@ -120,30 +120,29 @@ export class AuthService {
           role: true,
           createdAt: true,
           updatedAt: true,
-          isActive: true,
         }
       });
-
-      if (!user || !user.isActive) {
+  
+      if (!user) {
         return {
           success: false,
           message: 'Invalid email or password'
         };
       }
-
+  
       const isPasswordValid = await bcrypt.compare(loginData.password, user.password);
-
+  
       if (!isPasswordValid) {
         return {
           success: false,
           message: 'Invalid email or password'
         };
       }
-
+  
       const tokens = await this.generateTokenPair(user.id, user.email, loginData.rememberMe || false);
-
+  
       const { password, ...userWithoutPassword } = user;
-
+  
       return {
         success: true,
         message: 'Login successful',
@@ -152,7 +151,7 @@ export class AuthService {
           tokens
         }
       };
-
+  
     } catch (error) {
       console.error('Login error:', error);
       return {
@@ -187,6 +186,7 @@ export class AuthService {
         };
       }
   
+      // Utiliser la table Session au lieu de refreshToken
       const sessionRecord = await prisma.session.findFirst({
         where: {
           token: refreshToken,
@@ -209,10 +209,12 @@ export class AuthService {
         };
       }
   
+      // Supprimer l'ancienne session
       await prisma.session.delete({
         where: { id: sessionRecord.id }
       });
   
+      // Déterminer si c'était un token long-lived
       const isLongLived = sessionRecord.expiresAt > new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       const tokens = await this.generateTokenPair(decoded.userId, decoded.email, isLongLived);
   

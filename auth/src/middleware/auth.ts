@@ -48,7 +48,6 @@ export const authenticateToken = async (
 
     const decoded = jwt.verify(token, jwtSecret) as DecodedToken;
 
-    // Vérifier que c'est bien un access token
     if (decoded.type !== 'access') {
       res.status(401).json({ 
         success: false, 
@@ -58,13 +57,12 @@ export const authenticateToken = async (
       return;
     }
 
-    // Verify user still exists
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      select: { id: true, email: true, isActive: true }
+      select: { id: true, email: true}
     });
 
-    if (!user || !user.isActive) {
+    if (!user) {
       res.status(401).json({ 
         success: false, 
         message: 'User not found or inactive',
@@ -127,10 +125,10 @@ export const optionalAuth = async (
     if (decoded.type === 'access') {
       const user = await prisma.user.findUnique({
         where: { id: decoded.userId },
-        select: { id: true, email: true, isActive: true }
+        select: { id: true, email: true }
       });
 
-      if (user && user.isActive) {
+      if (user) {
         req.user = { id: user.id, email: user.email };
       }
     }
@@ -181,24 +179,23 @@ export const authenticateRefreshToken = async (
       return;
     }
 
-    // Vérifier que le refresh token existe en base (pour pouvoir le révoquer)
-    const tokenRecord = await prisma.refreshToken.findFirst({
+    // Vérifier que le refresh token existe en base via la table Session
+    const sessionRecord = await prisma.session.findFirst({
       where: { 
         token: refreshToken,
         userId: decoded.userId,
-        isActive: true,
         expiresAt: {
           gt: new Date()
         }
       },
       include: {
         user: {
-          select: { id: true, email: true, isActive: true }
+          select: { id: true, email: true }
         }
       }
     });
 
-    if (!tokenRecord || !tokenRecord.user.isActive) {
+    if (!sessionRecord) {
       res.status(401).json({ 
         success: false, 
         message: 'Invalid or expired refresh token',
@@ -207,7 +204,7 @@ export const authenticateRefreshToken = async (
       return;
     }
 
-    req.user = { id: tokenRecord.user.id, email: tokenRecord.user.email };
+    req.user = { id: sessionRecord.user.id, email: sessionRecord.user.email };
     next();
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {
