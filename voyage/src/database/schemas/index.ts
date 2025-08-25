@@ -1,0 +1,12 @@
+export { FlightData } from './FlightData';
+export type { IFlightData } from './FlightData';
+export { HotelData } from './HotelData';
+export type { IHotelData } from './HotelData';
+export { ActivityData } from './ActivityData';
+export type { IActivityData } from './ActivityData';
+export { TransferData } from './TransferData';
+export type { ITransferData } from './TransferData';
+export { Analytics } from './Analytics';
+export type { IAnalytics } from './Analytics';
+export { UserActivity } from './UserActivity';
+export type { IUserActivity } from './UserActivity';
