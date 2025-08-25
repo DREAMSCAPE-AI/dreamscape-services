@@ -1,0 +1,205 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  username      String?  @unique
+  password      String
+  firstName     String?
+  lastName      String?
+  isVerified    Boolean  @default(false)
+  role          Role     @default(USER)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  sessions      Session[]
+  bookings    Booking[]
+  searches    SearchHistory[]
+  preferences UserPreferences?
+  
+  @@map("users")
+}
+
+// User preferences for personalized recommendations
+model UserPreferences {
+  id                    String  @id @default(cuid())
+  userId                String  @unique
+  preferredAirlines     String[]
+  preferredCabinClass   String?
+  budgetRange           Json?   // {min: number, max: number}
+  preferredDepartureTime String? // morning, afternoon, evening
+  loyaltyPrograms       Json?   // Array of loyalty program details
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("user_preferences")
+}
+
+// Flight booking model
+model Booking {
+  id                String   @id @default(cuid())
+  userId            String
+  bookingReference  String   @unique
+  status            BookingStatus @default(PENDING)
+  totalPrice        Decimal
+  currency          String
+  
+  // Flight details
+  outboundFlightId  String
+  returnFlightId    String?
+  passengers        Json     // Array of passenger details
+  
+  // Booking metadata
+  bookedAt          DateTime @default(now())
+  travelDate        DateTime
+  returnDate        DateTime?
+  
+  // Payment details
+  paymentStatus     PaymentStatus @default(PENDING)
+  paymentMethod     String?
+  
+  user User @relation(fields: [userId], references: [id])
+  
+  @@map("bookings")
+}
+
+// Search history for analytics and recommendations
+model SearchHistory {
+  id              String   @id @default(cuid())
+  userId          String?
+  sessionId       String   // For anonymous users
+  
+  // Search parameters
+  origin          String
+  destination     String
+  departureDate   DateTime
+  returnDate      DateTime?
+  passengers      Json     // {adults: number, children: number, infants: number}
+  cabinClass      String?
+  
+  // Search metadata
+  searchedAt      DateTime @default(now())
+  resultsCount    Int?
+  
+  user User? @relation(fields: [userId], references: [id])
+  
+  @@map("search_history")
+}
+
+// Flight data cache for better performance
+model FlightCache {
+  id              String   @id @default(cuid())
+  cacheKey        String   @unique // Hash of search parameters
+  
+  // Search parameters
+  origin          String
+  destination     String
+  departureDate   DateTime
+  returnDate      DateTime?
+  passengers      Json
+  cabinClass      String?
+  
+  // Cached data
+  flightData      Json     // Amadeus API response
+  priceAnalysis   Json?    // Price analysis data
+  
+  // Cache metadata
+  cachedAt        DateTime @default(now())
+  expiresAt       DateTime
+  hitCount        Int      @default(0)
+  
+  @@map("flight_cache")
+}
+
+// Popular destinations for recommendations
+model PopularDestination {
+  id              String   @id @default(cuid())
+  iataCode        String   @unique
+  cityName        String
+  countryName     String
+  region          String?
+  
+  // Popularity metrics
+  searchCount     Int      @default(0)
+  bookingCount    Int      @default(0)
+  averagePrice    Decimal?
+  
+  // Seasonal data
+  peakSeason      Json?    // Array of peak months
+  offSeason       Json?    // Array of off-season months
+  
+  updatedAt       DateTime @updatedAt
+  
+  @@map("popular_destinations")
+}
+
+// Price alerts for users
+model PriceAlert {
+  id              String   @id @default(cuid())
+  userId          String
+  
+  // Alert parameters
+  origin          String
+  destination     String
+  departureDate   DateTime
+  returnDate      DateTime?
+  maxPrice        Decimal
+  
+  // Alert status
+  isActive        Boolean  @default(true)
+  lastChecked     DateTime?
+  triggeredAt     DateTime?
+  
+  createdAt       DateTime @default(now())
+  
+  @@map("price_alerts")
+}
+
+// Enums
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum UserCategory {
+  LEISURE
+  BUSINESS
+}
+model Session {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("sessions")
+}
+
+enum Role {
+  USER
+  ADMIN
+  MODERATOR
+}

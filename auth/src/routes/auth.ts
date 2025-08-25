@@ -1,7 +1,7 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
 import { AuthService } from '../services/AuthService';
-import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { authenticateToken, authenticateRefreshToken, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -40,7 +40,11 @@ const loginValidation = [
     .withMessage('Please provide a valid email address'),
   body('password')
     .notEmpty()
-    .withMessage('Password is required')
+    .withMessage('Password is required'),
+  body('rememberMe')
+    .optional()
+    .isBoolean()
+    .withMessage('Remember me must be a boolean value')
 ];
 
 const changePasswordValidation = [
@@ -68,6 +72,19 @@ const handleValidationErrors = (req: express.Request, res: express.Response): bo
   return false;
 };
 
+// Helper function to set secure cookie
+const setRefreshTokenCookie = (res: express.Response, refreshToken: string, rememberMe: boolean = false) => {
+  const maxAge = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000; // 30 days or 7 days
+  
+  res.cookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge,
+    path: '/'
+  });
+};
+
 /**
  * @route   POST /api/v1/auth/register
  * @desc    Register a new user
@@ -78,6 +95,15 @@ router.post('/register', signupValidation, async (req: express.Request, res: exp
     if (handleValidationErrors(req, res)) return;
 
     const result = await AuthService.signup(req.body);
+    
+    if (result.success && result.data) {
+      // Set refresh token as secure cookie
+      setRefreshTokenCookie(res, result.data.tokens.refreshToken, false);
+      
+      // Remove refresh token from response body
+      const { refreshToken, ...tokensWithoutRefresh } = result.data.tokens;
+      result.data.tokens = tokensWithoutRefresh as any;
+    }
     
     const statusCode = result.success ? 201 : 400;
     res.status(statusCode).json(result);
@@ -101,10 +127,19 @@ router.post('/login', loginValidation, async (req: express.Request, res: express
 
     const result = await AuthService.login(req.body);
     
+    if (result.success && result.data) {
+      // Set refresh token as secure cookie
+      setRefreshTokenCookie(res, result.data.tokens.refreshToken, req.body.rememberMe || false);
+      
+      // Remove refresh token from response body
+      const { refreshToken, ...tokensWithoutRefresh } = result.data.tokens;
+      result.data.tokens = tokensWithoutRefresh as any;
+    }
+    
     const statusCode = result.success ? 200 : 401;
     res.status(statusCode).json(result);
   } catch (error) {
-    console.error('Login route error:', error);
+    console.error('Refresh token route error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -211,6 +246,15 @@ router.post('/change-password', authenticateToken, changePasswordValidation, asy
     const { currentPassword, newPassword } = req.body;
     const result = await AuthService.changePassword(req.user.id, currentPassword, newPassword);
     
+    if (result.success) {
+      res.clearCookie('refreshToken', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        path: '/'
+      });
+    }
+    
     const statusCode = result.success ? 200 : 400;
     res.status(statusCode).json(result);
   } catch (error) {
@@ -228,7 +272,6 @@ router.post('/change-password', authenticateToken, changePasswordValidation, asy
  * @access  Private
  */
 router.post('/verify-token', authenticateToken, (req: AuthRequest, res: express.Response) => {
-  // If we reach here, the token is valid (middleware passed)
   res.json({
     success: true,
     message: 'Token is valid',
@@ -240,16 +283,70 @@ router.post('/verify-token', authenticateToken, (req: AuthRequest, res: express.
 
 /**
  * @route   POST /api/auth/logout
- * @desc    Logout user (client-side token removal)
+ * @desc    Logout user and revoke refresh token
  * @access  Private
  */
-router.post('/logout', authenticateToken, (req: AuthRequest, res: express.Response) => {
-  // Since we're using stateless JWT, logout is handled client-side
-  // This endpoint is mainly for consistency and potential future server-side logout logic
-  res.json({
-    success: true,
-    message: 'Logged out successfully'
-  });
+router.post('/logout', async (req: express.Request, res: express.Response) => {
+  try {
+    const refreshToken = req.cookies.refreshToken;
+    
+    if (refreshToken) {
+      await AuthService.logout(refreshToken);
+    }
+    
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/'
+    });
+
+    res.json({
+      success: true,
+      message: 'Logged out successfully'
+    });
+  } catch (error) {
+    console.error('Logout route error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+/**
+ * @route   POST /api/auth/logout-all
+ * @desc    Logout user from all devices
+ * @access  Private
+ */
+router.post('/logout-all', authenticateToken, async (req: AuthRequest, res: express.Response) => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
+      });
+      return;
+    }
+
+    const result = await AuthService.logoutAllDevices(req.user.id);
+    
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/'
+    });
+    
+    const statusCode = result.success ? 200 : 500;
+    res.status(statusCode).json(result);
+  } catch (error) {
+    console.error('Logout all devices route error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
 });
 
 export default router;

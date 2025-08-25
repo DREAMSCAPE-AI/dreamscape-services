@@ -1,10 +1,9 @@
 import rateLimit from 'express-rate-limit';
 
 // General API rate limiter
-// General API rate limiter
 export const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   message: {
     error: 'Too many requests from this IP, please try again later.',
     retryAfter: '15 minutes'
@@ -14,12 +13,9 @@ export const apiLimiter = rateLimit({
 });
 
 // Stricter rate limiter for search endpoints
-export const rateLimiter = apiLimiter;
-
-// Stricter rate limiter for search endpoints
 export const searchLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 20, // Limit each IP to 20 search requests per minute
+  windowMs: 1 * 60 * 1000,
+  max: 20,
   message: {
     error: 'Too many search requests, please try again later.',
     retryAfter: '1 minute'
@@ -27,3 +23,5 @@ export const searchLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+export const rateLimiter = apiLimiter;
