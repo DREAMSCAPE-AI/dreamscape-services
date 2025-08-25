@@ -1,6 +1,8 @@
 import axios, { AxiosResponse } from 'axios';
 import { LoginCredentials, SignupData, User } from '../store/authSlice';
 
+declare const window: Window & typeof globalThis;
+
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001/api/v1';
 
 const apiClient = axios.create({
@@ -13,26 +15,26 @@ const apiClient = axios.create({
 
 // Helper functions for localStorage (with proper checks)
 const getStoredToken = (): string | null => {
-  if (typeof window !== 'undefined' && window.localStorage) {
+  if (typeof window !== 'undefined' && 'localStorage' in window) {
     return window.localStorage.getItem('accessToken');
   }
   return null;
 };
 
 const setStoredToken = (token: string): void => {
-  if (typeof window !== 'undefined' && window.localStorage) {
+  if (typeof window !== 'undefined' && 'localStorage' in window) {
     window.localStorage.setItem('accessToken', token);
   }
 };
 
 const removeStoredToken = (): void => {
-  if (typeof window !== 'undefined' && window.localStorage) {
+  if (typeof window !== 'undefined' && 'localStorage' in window) {
     window.localStorage.removeItem('accessToken');
   }
 };
 
 const redirectToLogin = (): void => {
-  if (typeof window !== 'undefined' && window.location) {
+  if (typeof window !== 'undefined' && 'location' in window) {
     window.location.href = '/login';
   }
 };

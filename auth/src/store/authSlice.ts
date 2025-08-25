@@ -40,6 +40,30 @@ export interface SignupData {
   userCategory?: 'LEISURE' | 'BUSINESS';
 }
 
+interface ApiResponse<T> {
+  success: boolean;
+  message: string;
+  data: T;
+}
+
+interface LoginResponse {
+  user: User;
+  tokens: {
+    accessToken: string;
+    accessTokenExpiresIn: string;
+  };
+}
+
+interface UserProfileResponse {
+  user: User;
+}
+
+interface UpdateProfileResponse {
+  success: boolean;
+  message: string;
+  data: { user: User };
+}
+
 // Initial state
 const initialState: AuthState = {
   user: null,
@@ -51,31 +75,47 @@ const initialState: AuthState = {
 };
 
 // Async thunks
-export const loginAsync = createAsyncThunk(
+export const loginAsync = createAsyncThunk<LoginResponse, LoginCredentials, { rejectValue: string }>(
   'auth/login',
-  async (credentials: LoginCredentials, { rejectWithValue }) => {
+  async (credentials, { rejectWithValue }) => {
     try {
       const response = await authAPI.login(credentials);
-      return response.data;
+      return {
+        user: response.data.data.user,
+        tokens: response.data.data.tokens
+      };
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || 'Login failed');
     }
   }
 );
 
-export const signupAsync = createAsyncThunk(
+export const signupAsync = createAsyncThunk<
+  {
+    user: User;
+    tokens: {
+      accessToken: string;
+      accessTokenExpiresIn: string;
+    };
+  },
+  SignupData,
+  { rejectValue: string }
+>(
   'auth/signup',
-  async (signupData: SignupData, { rejectWithValue }) => {
+  async (signupData, { rejectWithValue }) => {
     try {
       const response = await authAPI.signup(signupData);
-      return response.data;
+      return {
+        user: response.data.data.user,
+        tokens: response.data.data.tokens
+      };
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || 'Signup failed');
     }
   }
 );
 
-export const refreshTokenAsync = createAsyncThunk(
+export const refreshTokenAsync = createAsyncThunk<ApiResponse<{ tokens: { accessToken: string; accessTokenExpiresIn: string } }>, void, { rejectValue: string }>(
   'auth/refreshToken',
   async (_, { rejectWithValue }) => {
     try {
@@ -87,7 +127,7 @@ export const refreshTokenAsync = createAsyncThunk(
   }
 );
 
-export const logoutAsync = createAsyncThunk(
+export const logoutAsync = createAsyncThunk<void, void, { rejectValue: string }>(
   'auth/logout',
   async (_, { rejectWithValue }) => {
     try {
@@ -99,24 +139,24 @@ export const logoutAsync = createAsyncThunk(
   }
 );
 
-export const getUserProfileAsync = createAsyncThunk(
+export const getUserProfileAsync = createAsyncThunk<UserProfileResponse, void, { rejectValue: string }>(
   'auth/getUserProfile',
   async (_, { rejectWithValue }) => {
     try {
       const response = await authAPI.getUserProfile();
-      return response.data;
+      return { user: response.data.data.user };
     } catch (error: any) {
-      return rejectWithValue(error.response?.data?.message || 'Failed to get user profile');
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch user profile');
     }
   }
 );
 
-export const updateProfileAsync = createAsyncThunk(
+export const updateProfileAsync = createAsyncThunk<UserProfileResponse, Partial<User>, { rejectValue: string }>(
   'auth/updateProfile',
-  async (profileData: Partial<User>, { rejectWithValue }) => {
+  async (profileData, { rejectWithValue }) => {
     try {
       const response = await authAPI.updateProfile(profileData);
-      return response.data;
+      return { user: response.data.data.user };
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || 'Failed to update profile');
     }
@@ -151,88 +191,71 @@ const authSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      // Login
+      // Handle login
       .addCase(loginAsync.pending, (state) => {
         state.isLoading = true;
         state.error = null;
       })
       .addCase(loginAsync.fulfilled, (state, action) => {
         state.isLoading = false;
+        state.isAuthenticated = true;
         state.user = action.payload.user;
         state.accessToken = action.payload.tokens.accessToken;
-        state.isAuthenticated = true;
         state.lastActivity = Date.now();
-        state.error = null;
       })
       .addCase(loginAsync.rejected, (state, action) => {
         state.isLoading = false;
-        state.error = action.payload as string;
-        state.isAuthenticated = false;
-        state.user = null;
-        state.accessToken = null;
+        state.error = action.payload || 'Login failed';
       })
-      
-      // Signup
+
+      // Handle signup
       .addCase(signupAsync.pending, (state) => {
         state.isLoading = true;
         state.error = null;
       })
       .addCase(signupAsync.fulfilled, (state, action) => {
         state.isLoading = false;
+        state.isAuthenticated = true;
         state.user = action.payload.user;
         state.accessToken = action.payload.tokens.accessToken;
-        state.isAuthenticated = true;
         state.lastActivity = Date.now();
-        state.error = null;
       })
       .addCase(signupAsync.rejected, (state, action) => {
         state.isLoading = false;
-        state.error = action.payload as string;
-        state.isAuthenticated = false;
-        state.user = null;
-        state.accessToken = null;
+        state.error = action.payload || 'Signup failed';
       })
-      
-      // Refresh token
-      .addCase(refreshTokenAsync.fulfilled, (state, action) => {
-        state.accessToken = action.payload.tokens.accessToken;
+
+      // Handle get user profile
+      .addCase(getUserProfileAsync.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(getUserProfileAsync.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.user = action.payload.user;
         state.isAuthenticated = true;
         state.lastActivity = Date.now();
-        state.error = null;
       })
-      .addCase(refreshTokenAsync.rejected, (state) => {
-        state.user = null;
-        state.accessToken = null;
+      .addCase(getUserProfileAsync.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload || 'Failed to fetch user profile';
         state.isAuthenticated = false;
       })
-      
-      // Logout
-      .addCase(logoutAsync.fulfilled, (state) => {
-        state.user = null;
-        state.accessToken = null;
-        state.isAuthenticated = false;
-        state.error = null;
-        state.lastActivity = Date.now();
-      })
-      
-      // Get user profile
-      .addCase(getUserProfileAsync.fulfilled, (state, action) => {
-        state.user = action.payload.user;
-      })
-      
-      // Update profile
+
+      // Handle update profile
       .addCase(updateProfileAsync.pending, (state) => {
         state.isLoading = true;
         state.error = null;
       })
       .addCase(updateProfileAsync.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.user = action.payload.user;
-        state.error = null;
+        if (state.user) {
+          state.user = { ...state.user, ...action.payload.user };
+        }
       })
       .addCase(updateProfileAsync.rejected, (state, action) => {
         state.isLoading = false;
-        state.error = action.payload as string;
+        state.error = action.payload || 'Failed to update profile';
       });
   },
 });

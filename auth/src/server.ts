@@ -93,6 +93,12 @@ const startServer = async () => {
   }
 };
 
-startServer();
+// Start server only if this file is run directly
+if (require.main === module) {
+  startServer().catch(error => {
+    console.error('💥 Fatal error during server startup:', error);
+    process.exit(1);
+  });
+}
 
-export default app;
+export { app, startServer };
