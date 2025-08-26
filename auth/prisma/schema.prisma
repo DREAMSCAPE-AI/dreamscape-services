@@ -20,7 +20,7 @@ model User {
   phoneNumber   String?
   dateOfBirth   DateTime?
   nationality   String?
-  userCategory  String?  @map("user_category") // 'LEISURE' or 'BUSINESS'
+  userCategory  UserCategory?  @default(LEISURE)
   isVerified    Boolean  @default(false)
   role          Role     @default(USER)
   createdAt     DateTime @default(now()) @map("created_at")

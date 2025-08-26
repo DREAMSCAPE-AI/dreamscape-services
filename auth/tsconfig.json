@@ -15,7 +15,13 @@
     "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
     "sourceMap": true,
-    "declaration": false
+    "declaration": false,
+    "baseUrl": "src",
+    "paths": {
+      "@types": ["types/index.ts"],
+      "@services/*": ["services/*"],
+      "@middleware/*": ["middleware/*"]
+    }
   },
   "include": [
     "src/**/*"

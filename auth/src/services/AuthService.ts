@@ -1,48 +1,17 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { 
+  SignupData, 
+  LoginData, 
+  UpdateProfileData, 
+  TokenPair, 
+  AuthResponse, 
+  UserSafeProfile 
+} from '@types';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
-
-export interface SignupData {
-  email: string;
-  password: string;
-  firstName?: string;
-  lastName?: string;
-  username?: string;
-}
-
-export interface LoginData {
-  email: string;
-  password: string;
-  rememberMe?: boolean;
-}
-
-export interface TokenPair {
-  accessToken: string;
-  refreshToken: string;
-  accessTokenExpiresIn: string;
-  refreshTokenExpiresIn: string;
-}
-
-export interface AuthResponse {
-  success: boolean;
-  message: string;
-  data?: {
-    user: {
-      id: string;
-      email: string;
-      username?: string | null;
-      firstName?: string | null;
-      lastName?: string | null;
-      isVerified: boolean;
-      role: string;
-      createdAt: Date;
-    };
-    tokens: TokenPair;
-  };
-}
 
 export class AuthService {
   private static readonly SALT_ROUNDS = 12;
@@ -57,10 +26,9 @@ export class AuthService {
       });
 
       if (existingUser) {
-        return {
-          success: false,
-          message: 'User with this email already exists'
-        };
+        const error = new Error('Email already exists');
+        (error as any).statusCode = 409;
+        throw error;
       }
 
       const hashedPassword = await bcrypt.hash(userData.password, this.SALT_ROUNDS);
@@ -82,6 +50,7 @@ export class AuthService {
           isVerified: true,
           role: true,
           createdAt: true,
+          updatedAt: true
         }
       });
 
@@ -186,7 +155,6 @@ export class AuthService {
         };
       }
   
-      // Utiliser la table Session au lieu de refreshToken
       const sessionRecord = await prisma.session.findFirst({
         where: {
           token: refreshToken,
@@ -209,12 +177,9 @@ export class AuthService {
         };
       }
   
-      // Supprimer l'ancienne session
       await prisma.session.delete({
         where: { id: sessionRecord.id }
       });
-  
-      // Déterminer si c'était un token long-lived
       const isLongLived = sessionRecord.expiresAt > new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       const tokens = await this.generateTokenPair(decoded.userId, decoded.email, isLongLived);
   
@@ -299,6 +264,7 @@ export class AuthService {
           role: true,
           createdAt: true,
           updatedAt: true,
+
         }
       });
 
@@ -324,19 +290,23 @@ export class AuthService {
     }
   }
 
-  static async updateProfile(userId: string, updateData: Partial<SignupData>): Promise<{
+  static async updateProfile(userId: string, updateData: UpdateProfileData): Promise<{
     success: boolean;
     message: string;
-    data?: any;
+    data?: { user: UserSafeProfile };
   }> {
     try {
-      const { password, ...safeUpdateData } = updateData;
-
       const updatedUser = await prisma.user.update({
         where: { id: userId },
         data: {
-          ...safeUpdateData,
           email: updateData.email ? updateData.email.toLowerCase() : undefined,
+          firstName: updateData.firstName,
+          lastName: updateData.lastName,
+          username: updateData.username,
+          phoneNumber: updateData.phoneNumber,
+          dateOfBirth: updateData.dateOfBirth,
+          nationality: updateData.nationality,
+          userCategory: updateData.userCategory,
         },
         select: {
           id: true,
@@ -344,28 +314,33 @@ export class AuthService {
           username: true,
           firstName: true,
           lastName: true,
+          phoneNumber: true,
+          dateOfBirth: true,
+          nationality: true,
+          userCategory: true,
           isVerified: true,
           role: true,
+          createdAt: true,
           updatedAt: true,
         }
       });
-
+  
       return {
         success: true,
         message: 'Profile updated successfully',
         data: { user: updatedUser }
       };
-
+  
     } catch (error) {
       console.error('Update profile error:', error);
       
       if (error instanceof Error && error.message.includes('Unique constraint')) {
         return {
           success: false,
-          message: 'Email already exists'
+          message: 'Email or username already exists'
         };
       }
-
+  
       return {
         success: false,
         message: 'Failed to update profile'
@@ -487,5 +462,11 @@ export class AuthService {
     } catch (error) {
       return null;
     }
+  }
+
+  static async resetTestData(): Promise<{ success: boolean }> {
+    await prisma.session.deleteMany({});
+    await prisma.user.deleteMany({ where: { email: { contains: 'test' } } });
+    return { success: true };
   }
 }
