@@ -14,26 +14,21 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Security middleware
 app.use(helmet());
 app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:5173',
   credentials: true
 }));
 
-// General middleware
 app.use(compression());
 app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Rate limiting
 app.use(rateLimiter);
 
-// Routes
 app.use('/api/v1/auth', router);
 
-// Health check
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -42,10 +37,8 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Error handling
 app.use(errorHandler);
 
-// 404 handler
 app.use('*', (req, res) => {
   res.status(404).json({
     success: false,
@@ -53,7 +46,6 @@ app.use('*', (req, res) => {
   });
 });
 
-// Start server
 const startServer = async () => {
   try {
     const dbService = DatabaseService.getInstance();
@@ -93,7 +85,6 @@ const startServer = async () => {
   }
 };
 
-// Start server only if this file is run directly
 if (require.main === module) {
   startServer().catch(error => {
     console.error('💥 Fatal error during server startup:', error);
