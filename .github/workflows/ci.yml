@@ -1,0 +1,142 @@
+name: CI Pipeline
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      skip_to_job:
+        description: 'Skip to specific job (test, lint, build, all)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - test
+          - lint
+          - build
+      force_run:
+        description: 'Force run all jobs regardless of previous failures'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  test:
+    # Le job test s'exécute toujours sauf si on skip explicitement vers un autre job
+    if: |
+      github.event_name != 'workflow_dispatch' || 
+      github.event.inputs.skip_to_job == 'all' || 
+      github.event.inputs.skip_to_job == 'test' ||
+      github.event.inputs.force_run == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ job.status }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run unit tests
+        run: npm run test:unit
+      - name: Run integration tests
+        run: npm run test:integration
+      - name: Run e2e tests
+        run: npm run test:e2e
+
+  lint:
+    # Lint s'exécute si :
+    # - Ce n'est pas un workflow_dispatch ET test réussit
+    # - OU c'est un workflow_dispatch avec les bonnes conditions
+    if: |
+      (github.event_name != 'workflow_dispatch' && needs.test.result == 'success') ||
+      (github.event_name == 'workflow_dispatch' && (
+        github.event.inputs.skip_to_job == 'all' || 
+        github.event.inputs.skip_to_job == 'lint' ||
+        github.event.inputs.force_run == 'true'
+      ))
+    needs: [test]
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ job.status }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run ESLint
+        run: npm run lint
+
+  build:
+    # Build s'exécute si :
+    # - Ce n'est pas un workflow_dispatch ET test + lint réussissent
+    # - OU c'est un workflow_dispatch avec les bonnes conditions
+    if: |
+      (github.event_name != 'workflow_dispatch' && needs.test.result == 'success' && needs.lint.result == 'success') ||
+      (github.event_name == 'workflow_dispatch' && (
+        github.event.inputs.skip_to_job == 'all' || 
+        github.event.inputs.skip_to_job == 'build' ||
+        github.event.inputs.force_run == 'true'
+      ))
+    needs: [test, lint]
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ job.status }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Build project
+        run: npm run build
+
+  notify-failure:
+    if: |
+      always() && (
+        needs.test.result == 'failure' || 
+        needs.lint.result == 'failure' || 
+        needs.build.result == 'failure'
+      )
+    needs: [test, lint, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify on failure
+        run: |
+          echo "❌ CI Pipeline failed!"
+          echo "Job results:"
+          echo "  - Test: ${{ needs.test.result }}"
+          echo "  - Lint: ${{ needs.lint.result }}"
+          echo "  - Build: ${{ needs.build.result }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo ""
+          echo "💡 Pour relancer manuellement les jobs qui n'ont pas pu s'exécuter:"
+          echo "   1. Allez dans l'onglet Actions de votre repository"
+          echo "   2. Cliquez sur 'Run workflow'"
+          echo "   3. Sélectionnez le job à partir duquel relancer"
+          # Ici vous pourrez ajouter une notification Slack/Teams plus tard
+
+  notify-manual-run:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify manual run info
+        run: |
+          echo "🔧 Exécution manuelle déclenchée"
+          echo "Skip to job: ${{ github.event.inputs.skip_to_job }}"
+          echo "Force run: ${{ github.event.inputs.force_run }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
