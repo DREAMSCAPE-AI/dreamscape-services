@@ -7,7 +7,6 @@ import {
 } from './schemas';
 import mongoose from 'mongoose';
 
-// Types et interfaces
 interface DatabaseHealth {
   postgresql: boolean;
   mongodb: boolean;
@@ -85,7 +84,6 @@ export class DatabaseService {
       errors: []
     };
 
-    // PostgreSQL connection (critique)
     try {
       await prisma.$connect();
       await this.testPostgreSQLConnection();
@@ -98,7 +96,6 @@ export class DatabaseService {
       console.error('❌ PostgreSQL connection failed:', errorMessage);
     }
 
-    // MongoDB connection (non-critique)
     try {
       await connectMongoDB();
       this.mongodbHealthy = true;
@@ -110,7 +107,6 @@ export class DatabaseService {
       console.warn('⚠️ MongoDB connection failed (non-critical):', errorMessage);
     }
 
-    // L'app peut fonctionner sans MongoDB, mais pas sans PostgreSQL
     if (!result.postgresql) {
       throw new Error(`Critical database connection failed: ${result.errors.join(', ')}`);
     }
@@ -176,7 +172,6 @@ export class DatabaseService {
       timestamp: new Date().toISOString()
     };
 
-    // PostgreSQL health check avec timeout
     const pgStart = Date.now();
     try {
       await Promise.race([
@@ -205,11 +200,9 @@ export class DatabaseService {
       console.error('PostgreSQL health check failed:', errorMessage);
     }
 
-    // MongoDB health check (plus léger que findOne())
     const mongoStart = Date.now();
     try {
       if (mongoose.connection.readyState === 1 && mongoose.connection.db) {
-        // Simple ping au lieu de findOne()
         await mongoose.connection.db.admin().ping();
         
         health.mongodb = true;
@@ -235,8 +228,7 @@ export class DatabaseService {
       console.error('MongoDB health check failed:', errorMessage);
     }
 
-    // Overall health (PostgreSQL critique, MongoDB optionnel)
-    health.overall = health.postgresql; // MongoDB n'est pas critique
+    health.overall = health.postgresql;
 
     console.log(`🏥 Health check completed in ${Date.now() - startTime}ms`);
     return health;
@@ -276,7 +268,6 @@ export class DatabaseService {
   public async disconnect(): Promise<void> {
     const shutdownPromises: Promise<void>[] = [];
 
-    // PostgreSQL disconnect
     if (this.postgresqlHealthy) {
       shutdownPromises.push(
         prisma.$disconnect()
@@ -284,21 +275,22 @@ export class DatabaseService {
             console.log('🔒 PostgreSQL disconnected');
             this.postgresqlHealthy = false;
           })
-          .catch((error) => {
-            console.error('❌ Error disconnecting PostgreSQL:', error);
+          .catch((error: unknown) => {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            console.error('❌ Error disconnecting PostgreSQL:', errorMessage);
           })
       );
     }
 
-    // MongoDB disconnect
     if (this.mongodbHealthy) {
       shutdownPromises.push(
         disconnectMongoDB()
           .then(() => {
             this.mongodbHealthy = false;
           })
-          .catch((error) => {
-            console.error('❌ Error disconnecting MongoDB:', error);
+          .catch((error: unknown) => {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            console.error('❌ Error disconnecting MongoDB:', errorMessage);
           })
       );
     }
@@ -309,6 +301,5 @@ export class DatabaseService {
   }
 }
 
-// Export des types pour utilisation dans les routes
 export type { DatabaseHealth, MongoModels, InitializationResult };
 export default DatabaseService;

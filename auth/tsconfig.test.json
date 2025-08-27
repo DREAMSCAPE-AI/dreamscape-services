@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["jest", "node"],
+    "esModuleInterop": true,
+    "rootDir": ".",
+    "skipLibCheck": true,
+    "lib": ["es2020", "dom"]
+  },
+  "include": [
+    "src/**/*",
+    "tests/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
