@@ -1,27 +1,54 @@
 import rateLimit from 'express-rate-limit';
 
-// General API rate limiter
-export const apiLimiter = rateLimit({
+export const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: {
+    success: false,
+    message: 'Too many login attempts, please try again in 15 minutes',
+    code: 'RATE_LIMIT_EXCEEDED'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => {
+    const email = req.body?.email || 'unknown';
+    return `${req.ip}-${email}`;
+  }
+});
+
+export const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  message: {
+    success: false,
+    message: 'Too many registration attempts, please try again later',
+    code: 'RATE_LIMIT_EXCEEDED'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   message: {
-    error: 'Too many requests from this IP, please try again later.',
-    retryAfter: '15 minutes'
+    success: false,
+    message: 'Too many requests, please try again later',
+    code: 'RATE_LIMIT_EXCEEDED'
   },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// Stricter rate limiter for search endpoints
-export const searchLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000,
+export const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
   max: 20,
   message: {
-    error: 'Too many search requests, please try again later.',
-    retryAfter: '1 minute'
+    success: false,
+    message: 'Too many token refresh attempts',
+    code: 'RATE_LIMIT_EXCEEDED'
   },
   standardHeaders: true,
   legacyHeaders: false,
 });
-
-export const rateLimiter = apiLimiter;

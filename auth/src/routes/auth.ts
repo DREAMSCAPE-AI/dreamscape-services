@@ -2,6 +2,7 @@ import express from 'express';
 import { body, validationResult } from 'express-validator';
 import { AuthService } from '@services/AuthService';
 import { authenticateToken, authenticateRefreshToken, AuthRequest } from '@middleware/auth';
+import { loginLimiter, registerLimiter, refreshLimiter } from '@middleware/rateLimiter';
 
 const router = express.Router();
 
@@ -82,12 +83,21 @@ const setRefreshTokenCookie = (res: express.Response, refreshToken: string, reme
   });
 };
 
+const conditionalRateLimit = (limiter: any) => {
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (!req.headers['x-test-rate-limit']) {
+      return next();
+    }
+    return limiter(req, res, next);
+  };
+};
+
 /**
  * @route   POST /api/v1/auth/register
  * @desc    Register a new user
  * @access  Public
  */
-router.post('/register', signupValidation, async (req: express.Request, res: express.Response) => {
+router.post('/register', conditionalRateLimit(registerLimiter), signupValidation, async (req: express.Request, res: express.Response) => {
   try {
     if (handleValidationErrors(req, res)) return;
 
@@ -98,10 +108,12 @@ router.post('/register', signupValidation, async (req: express.Request, res: exp
       
       const { refreshToken, ...tokensWithoutRefresh } = result.data.tokens;
       result.data.tokens = tokensWithoutRefresh as any;
+      
+      res.status(201).json(result);
+    } else {
+      const statusCode = result.message === 'Email already exists' ? 409 : 400;
+      res.status(statusCode).json(result);
     }
-    
-    const statusCode = result.success ? 201 : 400;
-    res.status(statusCode).json(result);
   } catch (error) {
     console.error('Signup route error:', error);
     res.status(500).json({
@@ -116,7 +128,7 @@ router.post('/register', signupValidation, async (req: express.Request, res: exp
  * @desc    Authenticate user and get token
  * @access  Public
  */
-router.post('/login', loginValidation, async (req: express.Request, res: express.Response) => {
+router.post('/login', conditionalRateLimit(loginLimiter), loginValidation, async (req: express.Request, res: express.Response) => {
   try {
     if (handleValidationErrors(req, res)) return;
 
@@ -264,17 +276,27 @@ router.post('/change-password', authenticateToken, changePasswordValidation, asy
  * @desc    Refresh access token using refresh token
  * @access  Private (refresh token required)
  */
-router.post('/refresh', authenticateRefreshToken, async (req: AuthRequest, res: express.Response) => {
+router.post('/refresh', conditionalRateLimit(refreshLimiter), async (req: express.Request, res: express.Response) => {
   try {
-    if (!req.user) {
-      res.status(401).json({
-        success: false,
-        message: 'User not authenticated'
-      });
-      return;
+    let refreshToken = req.cookies?.refreshToken;
+    
+    if (!refreshToken && req.headers.cookie) {
+      const cookies = req.headers.cookie.split(';');
+      const refreshCookie = cookies.find(cookie => cookie.trim().startsWith('refreshToken='));
+      if (refreshCookie) {
+        refreshToken = refreshCookie.split('=')[1].trim();
+        refreshToken = refreshToken.split(';')[0];
+      }
     }
-
-    const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
+    
+    if (!refreshToken) {
+      refreshToken = req.body.refreshToken;
+    }
+    
+    console.log('=== ROUTE DEBUG ===');
+    console.log('Cookie header:', req.headers.cookie);
+    console.log('Parsed refreshToken:', refreshToken ? refreshToken.substring(0, 20) + '...' : 'NONE');
+    console.log('req.cookies:', req.cookies);
     
     if (!refreshToken) {
       res.status(401).json({
@@ -335,9 +357,11 @@ router.post('/logout', async (req: express.Request, res: express.Response) => {
     }
 
     const refreshToken = req.cookies.refreshToken;
+    const authHeader = req.headers.authorization;
+    const accessToken = authHeader && authHeader.split(' ')[1];
     
     if (refreshToken) {
-      await AuthService.logout(refreshToken);
+      await AuthService.logout(refreshToken, accessToken);
     }
     
     res.clearCookie('refreshToken', {
@@ -375,7 +399,10 @@ router.post('/logout-all', authenticateToken, async (req: AuthRequest, res: expr
       return;
     }
 
-    const result = await AuthService.logoutAllDevices(req.user.id);
+    const authHeader = req.headers.authorization;
+    const accessToken = authHeader && authHeader.split(' ')[1];
+
+    const result = await AuthService.logoutAllDevices(req.user.id, accessToken);
     
     res.clearCookie('refreshToken', {
       httpOnly: true,

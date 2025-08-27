@@ -80,6 +80,7 @@ export interface TokenPair {
 export interface AuthResponse {
     success: boolean;
     message: string;
+    statusCode?: number;
     data?: {
       user: UserSafeProfile;
       tokens: TokenPair;

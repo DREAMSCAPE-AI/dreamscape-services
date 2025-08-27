@@ -26,13 +26,26 @@ export const authenticateToken = async (
 ): Promise<void> => {
   try {
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+    const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) {
       res.status(401).json({ 
         success: false, 
         message: 'Access token required',
         code: 'TOKEN_MISSING'
+      });
+      return;
+    }
+
+    const blacklistedToken = await prisma.tokenBlacklist.findUnique({
+      where: { token }
+    });
+
+    if (blacklistedToken) {
+      res.status(401).json({ 
+        success: false, 
+        message: 'Token has been revoked',
+        code: 'TOKEN_REVOKED'
       });
       return;
     }
@@ -114,6 +127,15 @@ export const optionalAuth = async (
       return;
     }
 
+    const blacklistedToken = await prisma.tokenBlacklist.findUnique({
+      where: { token }
+    });
+
+    if (blacklistedToken) {
+      next();
+      return;
+    }
+
     const jwtSecret = process.env.JWT_SECRET;
     if (!jwtSecret) {
       next();
@@ -135,12 +157,10 @@ export const optionalAuth = async (
 
     next();
   } catch (error) {
-    // For optional auth, we don't return errors, just continue without user
     next();
   }
 };
 
-// Nouveau middleware pour la validation des refresh tokens
 export const authenticateRefreshToken = async (
   req: AuthRequest,
   res: Response,
@@ -169,7 +189,6 @@ export const authenticateRefreshToken = async (
 
     const decoded = jwt.verify(refreshToken, jwtSecret) as DecodedToken;
 
-    // Vérifier que c'est bien un refresh token
     if (decoded.type !== 'refresh') {
       res.status(401).json({ 
         success: false, 
@@ -179,7 +198,6 @@ export const authenticateRefreshToken = async (
       return;
     }
 
-    // Vérifier que le refresh token existe en base via la table Session
     const sessionRecord = await prisma.session.findFirst({
       where: { 
         token: refreshToken,

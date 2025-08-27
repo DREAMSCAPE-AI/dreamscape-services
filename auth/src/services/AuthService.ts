@@ -24,15 +24,16 @@ export class AuthService {
       const existingUser = await prisma.user.findUnique({
         where: { email: userData.email.toLowerCase() }
       });
-
+  
       if (existingUser) {
-        const error = new Error('Email already exists');
-        (error as any).statusCode = 409;
-        throw error;
+        return {
+          success: false,
+          message: 'Email already exists'
+        };
       }
-
+  
       const hashedPassword = await bcrypt.hash(userData.password, this.SALT_ROUNDS);
-
+  
       const user = await prisma.user.create({
         data: {
           email: userData.email.toLowerCase(),
@@ -53,9 +54,9 @@ export class AuthService {
           updatedAt: true
         }
       });
-
+  
       const tokens = await this.generateTokenPair(user.id, user.email, false);
-
+  
       return {
         success: true,
         message: 'Account created successfully',
@@ -64,9 +65,17 @@ export class AuthService {
           tokens
         }
       };
-
-    } catch (error) {
+  
+    } catch (error: any) {
       console.error('Signup error:', error);
+      
+      if (error.code === 'P2002') {
+        return {
+          success: false,
+          message: 'Email already exists'
+        };
+      }
+      
       return {
         success: false,
         message: 'Failed to create account. Please try again.'
@@ -136,6 +145,9 @@ export class AuthService {
     data?: { tokens: TokenPair };
   }> {
     try {
+      console.log('=== REFRESH TOKEN DEBUG ===');
+      console.log('Received token:', refreshToken.substring(0, 20) + '...');
+      
       const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
       
       if (!jwtRefreshSecret) {
@@ -149,11 +161,17 @@ export class AuthService {
       };
   
       if (decoded.type !== 'refresh') {
+        console.log('Invalid token type:', decoded.type);
         return {
           success: false,
           message: 'Invalid token type'
         };
       }
+  
+      const sessionCount = await prisma.session.count({
+        where: { token: refreshToken }
+      });
+      console.log('Sessions with this token:', sessionCount);
   
       const sessionRecord = await prisma.session.findFirst({
         where: {
@@ -170,18 +188,33 @@ export class AuthService {
         }
       });
   
+      console.log('Session found:', !!sessionRecord);
+      console.log('Session ID:', sessionRecord?.id);
+  
       if (!sessionRecord) {
+        console.log('No session record found for token');
         return {
           success: false,
           message: 'Invalid or expired refresh token'
         };
       }
   
-      await prisma.session.delete({
+      console.log('Deleting session:', sessionRecord.id);
+      const deleteResult = await prisma.session.delete({
         where: { id: sessionRecord.id }
       });
+      console.log('Delete result:', deleteResult);
+  
+      const remainingSessions = await prisma.session.count({
+        where: { token: refreshToken }
+      });
+      console.log('Remaining sessions with this token after delete:', remainingSessions);
+  
       const isLongLived = sessionRecord.expiresAt > new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       const tokens = await this.generateTokenPair(decoded.userId, decoded.email, isLongLived);
+      
+      console.log('New tokens generated');
+      console.log('=== END REFRESH TOKEN DEBUG ===');
   
       return {
         success: true,
@@ -189,7 +222,7 @@ export class AuthService {
         data: { tokens }
       };
   
-    } catch (error) {
+    } catch (error: any) {
       console.error('Refresh token error:', error);
       return {
         success: false,
@@ -198,7 +231,7 @@ export class AuthService {
     }
   }
 
-  static async logout(refreshToken: string): Promise<{
+  static async logout(refreshToken: string, accessToken?: string): Promise<{
     success: boolean;
     message: string;
   }> {
@@ -208,6 +241,13 @@ export class AuthService {
           token: refreshToken
         }
       });
+  
+      if (accessToken) {
+        const decoded = jwt.decode(accessToken) as { userId: string } | null;
+        if (decoded?.userId) {
+          await this.addTokenToBlacklist(accessToken, decoded.userId);
+        }
+      }
   
       return {
         success: true,
@@ -222,7 +262,7 @@ export class AuthService {
     }
   }
   
-  static async logoutAllDevices(userId: string): Promise<{
+  static async logoutAllDevices(userId: string, currentAccessToken?: string): Promise<{
     success: boolean;
     message: string;
   }> {
@@ -232,6 +272,10 @@ export class AuthService {
           userId: userId
         }
       });
+  
+      if (currentAccessToken) {
+        await this.addTokenToBlacklist(currentAccessToken, userId);
+      }
   
       return {
         success: true,
@@ -414,14 +458,27 @@ export class AuthService {
   
     const refreshTokenExpiry = rememberMe ? this.REFRESH_TOKEN_EXPIRY_LONG : this.REFRESH_TOKEN_EXPIRY_SHORT;
   
+    const accessTokenJti = crypto.randomBytes(16).toString('hex');
+    const refreshTokenJti = crypto.randomBytes(16).toString('hex');
+  
     const accessToken = jwt.sign(
-      { userId, email, type: 'access' },
+      { 
+        userId, 
+        email, 
+        type: 'access',
+        jti: accessTokenJti
+      },
       jwtSecret,
       { expiresIn: this.ACCESS_TOKEN_EXPIRY }
     );
   
     const refreshToken = jwt.sign(
-      { userId, email, type: 'refresh' },
+      { 
+        userId, 
+        email, 
+        type: 'refresh',
+        jti: refreshTokenJti
+      },
       jwtRefreshSecret,
       { expiresIn: refreshTokenExpiry }
     );
@@ -429,13 +486,21 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + (rememberMe ? 30 : 7));
   
-    await prisma.session.create({
-      data: {
-        token: refreshToken,
-        userId,
-        expiresAt
+    try {
+      await prisma.session.create({
+        data: {
+          token: refreshToken,
+          userId,
+          expiresAt
+        }
+      });
+    } catch (error: any) {
+      if (error.code === 'P2002') {
+        console.error('Duplicate refresh token generated, retrying...');
+        return this.generateTokenPair(userId, email, rememberMe);
       }
-    });
+      throw error;
+    }
   
     return {
       accessToken,
@@ -445,19 +510,24 @@ export class AuthService {
     };
   }
 
-  static verifyToken(token: string): { userId: string; email: string } | null {
+  static async verifyToken(token: string): Promise<{ userId: string; email: string } | null> {
     try {
       const jwtSecret = process.env.JWT_SECRET;
       if (!jwtSecret) {
         throw new Error('JWT_SECRET environment variable is not set');
       }
-
+  
+      const isBlacklisted = await this.isTokenBlacklisted(token);
+      if (isBlacklisted) {
+        return null;
+      }
+  
       const decoded = jwt.verify(token, jwtSecret) as { userId: string; email: string; type: string };
       
       if (decoded.type !== 'access') {
         return null;
       }
-
+  
       return { userId: decoded.userId, email: decoded.email };
     } catch (error) {
       return null;
@@ -468,5 +538,37 @@ export class AuthService {
     await prisma.session.deleteMany({});
     await prisma.user.deleteMany({ where: { email: { contains: 'test' } } });
     return { success: true };
+  }
+
+  private static async addTokenToBlacklist(token: string, userId: string): Promise<void> {
+    try {
+      const decoded = jwt.decode(token) as { exp: number } | null;
+      if (!decoded?.exp) return;
+  
+      const expiresAt = new Date(decoded.exp * 1000);
+      
+      await prisma.tokenBlacklist.create({
+        data: {
+          token,
+          userId,
+          expiresAt
+        }
+      });
+    } catch (error) {
+      console.error('Error adding token to blacklist:', error);
+    }
+  }
+  
+  private static async isTokenBlacklisted(token: string): Promise<boolean> {
+    try {
+      const blacklistedToken = await prisma.tokenBlacklist.findUnique({
+        where: { token }
+      });
+      
+      return !!blacklistedToken;
+    } catch (error) {
+      console.error('Error checking token blacklist:', error);
+      return false;
+    }
   }
 }

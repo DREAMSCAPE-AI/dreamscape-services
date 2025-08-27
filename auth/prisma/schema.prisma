@@ -28,6 +28,7 @@ model User {
   
   // Relations
   sessions      Session[]
+  tokenBlacklist   TokenBlacklist[]
   bookings      Booking[]
   searches      SearchHistory[]
   preferences   UserPreferences?
@@ -201,6 +202,18 @@ model Session {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@map("sessions")
+}
+
+model TokenBlacklist {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("token_blacklist")
 }
 
 enum Role {

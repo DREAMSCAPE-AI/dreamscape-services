@@ -7,7 +7,6 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { DatabaseService } from './database/DatabaseService';
 import router from './routes/auth';
-import { rateLimiter } from './middleware/rateLimiter';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
 dotenv.config();
@@ -28,8 +27,6 @@ app.use(compression());
 app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
-
-app.use(rateLimiter);
 
 app.use('/api/v1/auth', router);
 
