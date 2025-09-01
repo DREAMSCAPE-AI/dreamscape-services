@@ -35,6 +35,8 @@ jobs:
       status: ${{ job.status }}
     steps:
       - uses: actions/checkout@v4
+      - name: Clone dreamscape-tests repository
+        run: git clone https://github.com/DREAMSCAPE-AI/dreamscape-tests.git
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -42,12 +44,27 @@ jobs:
           cache: 'npm'
       - name: Install dependencies
         run: npm ci
+      - name: Generate package-lock.json
+        run: npm install --package-lock-only
       - name: Run unit tests
         run: npm run test:unit
       - name: Run integration tests
-        run: npm run test:integration
-      - name: Run e2e tests
-        run: npm run test:e2e
+        run: npm run test:integration -- --config dreamscape-tests/tools/setup/jest.config.integration.js
+      - name: Run performance tests
+        run: npm run test:performance
+      - name: Run security tests
+        run: npm run test:security
+      - name: Run accessibility tests
+        run: npm run test:accessibility
+      - name: Generate test reports
+        run: |
+          mkdir -p reports
+          cp dreamscape-tests/reports/* reports/
+      - name: Upload test reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-reports
+          path: reports
 
   lint:
     # Lint s'exécute si :
