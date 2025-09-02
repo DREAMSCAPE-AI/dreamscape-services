@@ -1,0 +1,14 @@
+// Auth Service Prisma Schema - Points to unified PostgreSQL
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../db/node_modules/@prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Import models from unified schema
+// This schema now points to the unified PostgreSQL database
+// All models are defined in ../../db/schema.prisma

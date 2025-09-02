@@ -21,7 +21,7 @@
     "db:seed": "tsx src/database/seed.ts"
   },
   "dependencies": {
-    "@prisma/client": "^5.7.1",
+    "@dreamscape/db": "file:../db",
     "axios": "^1.6.2",
     "bcryptjs": "^3.0.2",
     "compression": "^1.7.4",
@@ -32,8 +32,6 @@
     "express-validator": "^7.2.1",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
-    "mongodb": "^6.3.0",
-    "mongoose": "^8.0.3",
     "morgan": "^1.10.0",
     "node-fetch": "^3.3.2"
   },
