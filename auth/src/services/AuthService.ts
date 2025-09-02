@@ -9,9 +9,7 @@ import {
   AuthResponse, 
   UserSafeProfile 
 } from '@types';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@dreamscape/db';
 
 export class AuthService {
   private static readonly SALT_ROUNDS = 12;
