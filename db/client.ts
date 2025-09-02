@@ -1,23 +1,15 @@
-import { PrismaClient } from './node_modules/@prisma/client/index.js';
+import { PrismaClient } from '@prisma/client';
 
-// Global Prisma client instance
-declare global {
-  var __prisma: PrismaClient | undefined;
-}
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined;
+};
 
-// Create Prisma client with connection pooling for production
-export const prisma = globalThis.__prisma || new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['query', 'info', 'warn', 'error'] : ['error'],
+const isDevelopment = !globalThis.process?.env?.NODE_ENV || globalThis.process.env.NODE_ENV === 'development';
+
+export const prisma = globalForPrisma.prisma ?? new PrismaClient({
+  log: isDevelopment ? ['query', 'error', 'warn'] : ['error'],
 });
 
-// In development, save the client to the global object to avoid creating multiple instances
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.__prisma = prisma;
+if (isDevelopment) {
+  globalForPrisma.prisma = prisma;
 }
-
-// Graceful shutdown
-process.on('beforeExit', async () => {
-  await prisma.$disconnect();
-});
-
-export default prisma;
