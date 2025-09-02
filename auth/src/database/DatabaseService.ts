@@ -1,6 +1,5 @@
 import prisma from './prisma';
 
-// Types et interfaces
 interface DatabaseHealth {
   postgresql: boolean;
   overall: boolean;

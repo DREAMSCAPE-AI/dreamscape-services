@@ -1,0 +1,26 @@
+{
+    "compilerOptions": {
+      "target": "ES2022",
+      "module": "commonjs",
+      "lib": ["ES2022"],
+      "outDir": "./dist",
+      "strict": true,
+      "esModuleInterop": true,
+      "skipLibCheck": true,
+      "forceConsistentCasingInFileNames": true,
+      "resolveJsonModule": true,
+      "moduleResolution": "node",
+      "allowSyntheticDefaultImports": true,
+      "sourceMap": true,
+      "declaration": true,
+      "types": ["node"]
+    },
+    "include": [
+      "*.ts",
+      "prisma/**/*"
+    ],
+    "exclude": [
+      "node_modules",
+      "dist"
+    ]
+}
