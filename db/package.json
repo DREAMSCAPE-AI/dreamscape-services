@@ -1,18 +1,24 @@
 {
   "name": "@dreamscape/db",
   "version": "1.0.0",
-  "main": "client.js",
-  "types": "client.d.ts",
+  "description": "Shared database client for Dreamscape services",
+  "main": "index.js",
+  "types": "index.d.ts",
   "scripts": {
     "build": "tsc",
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "studio": "prisma studio",
+    "reset": "prisma migrate reset --force",
+    "push": "prisma db push",
     "postinstall": "prisma generate"
   },
   "dependencies": {
-    "@prisma/client": "^5.0.0"
+    "@prisma/client": "^5.7.1"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "prisma": "^5.0.0",
-    "typescript": "^5.0.0"
+    "@types/node": "^20.19.11",
+    "prisma": "^5.7.1",
+    "typescript": "^5.3.3"
   }
 }

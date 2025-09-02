@@ -16,11 +16,12 @@
     "allowSyntheticDefaultImports": true,
     "sourceMap": true,
     "declaration": false,
-    "baseUrl": "src",
+    "baseUrl": ".",
     "paths": {
-      "@types": ["types/index.ts"],
-      "@services/*": ["services/*"],
-      "@middleware/*": ["middleware/*"]
+      "@types": ["src/types/index.ts"],
+      "@services/*": ["src/services/*"],
+      "@middleware/*": ["src/middleware/*"],
+      "@dreamscape/db": ["../db/index.ts"]
     }
   },
   "include": [
