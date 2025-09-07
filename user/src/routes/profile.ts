@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
-import prisma from '../../../db/client';
+import { prisma } from '../../../db/client';
 import multer from 'multer';
 import path from 'path';
+import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
@@ -65,35 +66,59 @@ const validateProfileData = (data: any) => {
   return errors;
 };
 
-// Get user profile
-router.get('/:userId', async (req: Request, res: Response): Promise<void> => {
+// Get user profile and settings (require authentication)
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { userId } = req.params;
+    // Assuming userId is available from auth middleware
+    const userId = req.user?.id;
 
     if (!userId) {
-      return sendError(res, 400, 'User ID is required');
+      return sendError(res, 401, 'Authentication required');
     }
 
-    const profile = await prisma.userProfile.findUnique({
-      where: { userId },
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
       include: {
-        user: {
-          select: {
-            email: true,
-            firstName: true,
-            lastName: true
-          }
-        }
+        profile: true,
+        settings: true
       }
     });
 
-    if (!profile) {
-      return sendError(res, 404, 'Profile not found');
+    if (!user) {
+      return sendError(res, 404, 'User not found');
     }
 
-    res.json(profile);
+    res.json({
+      profile: {
+        name: user.username || `${user.firstName || ''} ${user.lastName || ''}`.trim() || '',
+        email: user.email,
+        photo: user.profile?.avatar || null
+      },
+      preferences: {
+        language: user.settings?.language || 'English',
+        currency: user.settings?.currency || 'USD',
+        timezone: user.settings?.timezone || 'UTC'
+      },
+      notifications: {
+        dealAlerts: user.settings?.dealAlerts ?? true,
+        tripReminders: user.settings?.tripReminders ?? true,
+        priceAlerts: user.settings?.priceAlerts ?? true,
+        newsletter: user.settings?.newsletter ?? false
+      },
+      privacy: {
+        profileVisibility: user.settings?.profileVisibility || 'public',
+        dataSharing: user.settings?.dataSharing ?? false,
+        marketing: user.settings?.marketing ?? true
+      },
+      travel: {
+        preferredDestinations: user.settings?.preferredDestinations || [],
+        accommodationType: user.settings?.accommodationType || [],
+        activities: user.settings?.activities || [],
+        dietary: user.settings?.dietary || []
+      }
+    });
   } catch (error) {
-    console.error('Error fetching profile:', error);
+    console.error('Error fetching user profile:', error);
     sendError(res, 500, 'Failed to fetch profile');
   }
 });
@@ -147,45 +172,121 @@ router.post('/:userId', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// Update user profile
-router.put('/:userId', async (req: Request, res: Response): Promise<void> => {
+// Update user profile and settings
+router.put('/', authenticateToken, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { userId } = req.params;
-    const updateData = req.body;
+    const userId = req.user?.id;
+    const { profile, preferences, notifications, privacy, travel } = req.body;
 
     if (!userId) {
-      return sendError(res, 400, 'User ID is required');
+      return sendError(res, 401, 'Authentication required');
     }
 
-    const validationErrors = validateProfileData(updateData);
-    if (validationErrors.length > 0) {
-      return sendError(res, 400, validationErrors.join(', '));
-    }
-
-    // Process dateOfBirth if provided
-    if (updateData.dateOfBirth) {
-      updateData.dateOfBirth = new Date(updateData.dateOfBirth);
-    }
-
-    const profile = await prisma.userProfile.update({
-      where: { userId },
-      data: updateData,
-      include: {
-        user: {
-          select: {
-            email: true,
-            firstName: true,
-            lastName: true
-          }
+    // Update user basic info if provided
+    if (profile?.name !== undefined || profile?.email !== undefined) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          ...(profile?.name !== undefined && { username: profile.name }),
+          ...(profile?.email !== undefined && { email: profile.email })
         }
+      });
+    }
+
+    // Update user settings (create if doesn't exist)
+    const userSettings = await prisma.userSettings.upsert({
+      where: { userId },
+      create: {
+        userId,
+        language: preferences?.language || 'English',
+        currency: preferences?.currency || 'USD',
+        timezone: preferences?.timezone || 'UTC',
+        dealAlerts: notifications?.dealAlerts ?? true,
+        tripReminders: notifications?.tripReminders ?? true,
+        priceAlerts: notifications?.priceAlerts ?? true,
+        newsletter: notifications?.newsletter ?? false,
+        profileVisibility: privacy?.profileVisibility || 'public',
+        dataSharing: privacy?.dataSharing ?? false,
+        marketing: privacy?.marketing ?? true,
+        preferredDestinations: travel?.preferredDestinations || [],
+        accommodationType: travel?.accommodationType || [],
+        activities: travel?.activities || [],
+        dietary: travel?.dietary || []
+      },
+      update: {
+        language: preferences?.language,
+        currency: preferences?.currency,
+        timezone: preferences?.timezone,
+        dealAlerts: notifications?.dealAlerts,
+        tripReminders: notifications?.tripReminders,
+        priceAlerts: notifications?.priceAlerts,
+        newsletter: notifications?.newsletter,
+        profileVisibility: privacy?.profileVisibility,
+        dataSharing: privacy?.dataSharing,
+        marketing: privacy?.marketing,
+        preferredDestinations: travel?.preferredDestinations,
+        accommodationType: travel?.accommodationType,
+        activities: travel?.activities,
+        dietary: travel?.dietary
       }
     });
 
-    res.json(profile);
-  } catch (error: any) {
-    if (error.code === 'P2025') {
-      return sendError(res, 404, 'Profile not found');
+    // Update user profile if provided
+    if (profile?.photo) {
+      await prisma.userProfile.upsert({
+        where: { userId },
+        create: {
+          userId,
+          firstName: '',
+          lastName: '',
+          avatar: profile.photo
+        },
+        update: {
+          avatar: profile.photo
+        }
+      });
     }
+
+    // Get updated user data
+    const updatedUser = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        profile: true,
+        settings: true
+      }
+    });
+
+    res.json({
+      message: 'Profile updated successfully',
+      profile: {
+        name: updatedUser?.username || '',
+        email: updatedUser?.email || '',
+        photo: updatedUser?.profile?.avatar || null
+      },
+      preferences: {
+        language: userSettings.language,
+        currency: userSettings.currency,
+        timezone: userSettings.timezone
+      },
+      notifications: {
+        dealAlerts: userSettings.dealAlerts,
+        tripReminders: userSettings.tripReminders,
+        priceAlerts: userSettings.priceAlerts,
+        newsletter: userSettings.newsletter
+      },
+      privacy: {
+        profileVisibility: userSettings.profileVisibility,
+        dataSharing: userSettings.dataSharing,
+        marketing: userSettings.marketing
+      },
+      travel: {
+        preferredDestinations: userSettings.preferredDestinations,
+        accommodationType: userSettings.accommodationType,
+        activities: userSettings.activities,
+        dietary: userSettings.dietary
+      }
+    });
+  } catch (error: any) {
     console.error('Error updating profile:', error);
     sendError(res, 500, 'Failed to update profile');
   }

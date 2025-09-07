@@ -4,7 +4,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
-import prisma from '../../db/client';
+import { prisma } from '@dreamscape/db';
 // import activitiesRoutes from './routes/activities'; // TODO: Fix AmadeusService import
 import profileRoutes from './routes/profile';
 import { apiLimiter } from './middleware/rateLimiter';
@@ -36,7 +36,7 @@ app.use('/uploads', express.static('uploads'));
 
 // Routes
 // app.use('/api/v1/activities', activitiesRoutes); // TODO: Fix AmadeusService import
-app.use('/api/v1/profile', profileRoutes);
+app.use('/api/v1/users/profile', profileRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

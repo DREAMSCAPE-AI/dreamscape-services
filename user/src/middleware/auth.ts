@@ -1,14 +1,20 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../../db/client';
 
 export interface AuthRequest extends Request {
   user?: {
     id: string;
     email: string;
   };
+}
+
+export interface DecodedToken {
+  userId: string;
+  email: string;
+  type: 'access' | 'refresh';
+  iat: number;
+  exp: number;
 }
 
 export const authenticateToken = async (
@@ -37,10 +43,28 @@ export const authenticateToken = async (
       return;
     }
 
-    const decoded = jwt.verify(token, jwtSecret) as { 
-      userId: string; 
-      email: string; 
-    };
+    // Check if token is blacklisted
+    const blacklistedToken = await prisma.tokenBlacklist.findUnique({
+      where: { token }
+    });
+
+    if (blacklistedToken) {
+      res.status(401).json({ 
+        success: false, 
+        message: 'Token has been revoked' 
+      });
+      return;
+    }
+
+    const decoded = jwt.verify(token, jwtSecret) as DecodedToken;
+
+    if (decoded.type !== 'access') {
+      res.status(401).json({ 
+        success: false, 
+        message: 'Invalid token type' 
+      });
+      return;
+    }
 
     // Verify user still exists
     const user = await prisma.user.findUnique({
@@ -95,18 +119,26 @@ export const optionalAuth = async (
       return;
     }
 
-    const decoded = jwt.verify(token, jwtSecret) as { 
-      userId: string; 
-      email: string; 
-    };
-
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-      select: { id: true, email: true }
+    const blacklistedToken = await prisma.tokenBlacklist.findUnique({
+      where: { token }
     });
 
-    if (user) {
-      req.user = user;
+    if (blacklistedToken) {
+      next();
+      return;
+    }
+
+    const decoded = jwt.verify(token, jwtSecret) as DecodedToken;
+
+    if (decoded.type === 'access') {
+      const user = await prisma.user.findUnique({
+        where: { id: decoded.userId },
+        select: { id: true, email: true }
+      });
+
+      if (user) {
+        req.user = user;
+      }
     }
 
     next();

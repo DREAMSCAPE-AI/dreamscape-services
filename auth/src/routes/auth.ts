@@ -293,10 +293,6 @@ router.post('/refresh', conditionalRateLimit(refreshLimiter), async (req: expres
       refreshToken = req.body.refreshToken;
     }
     
-    console.log('=== ROUTE DEBUG ===');
-    console.log('Cookie header:', req.headers.cookie);
-    console.log('Parsed refreshToken:', refreshToken ? refreshToken.substring(0, 20) + '...' : 'NONE');
-    console.log('req.cookies:', req.cookies);
     
     if (!refreshToken) {
       res.status(401).json({
