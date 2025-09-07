@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "User management microservice for Dreamscape OTA",
   "main": "dist/server.js",
-  "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
@@ -21,6 +20,7 @@
     "db:seed": "cd ../db && npm run db:seed"
   },
   "dependencies": {
+    "@dreamscape/db": "file:../db",
     "@prisma/client": "^5.7.1",
     "axios": "^1.6.2",
     "bcryptjs": "^3.0.2",

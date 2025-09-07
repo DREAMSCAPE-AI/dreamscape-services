@@ -33,6 +33,7 @@ model User {
   tokenBlacklist   TokenBlacklist[]
   searches      SearchHistory[]
   preferences   UserPreferences?
+  settings      UserSettings?
   
   @@map("users")
 }
@@ -77,6 +78,39 @@ model UserBehavior {
   timestamp DateTime @default(now())
 
   @@map("user_behaviors")
+}
+
+model UserSettings {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Account preferences
+  language    String   @default("English")
+  currency    String   @default("USD")
+  timezone    String   @default("UTC")
+  
+  // Notification settings
+  dealAlerts      Boolean @default(true)
+  tripReminders   Boolean @default(true)
+  priceAlerts     Boolean @default(true)
+  newsletter      Boolean @default(false)
+  
+  // Privacy settings
+  profileVisibility String  @default("public") // public, private
+  dataSharing      Boolean @default(false)
+  marketing        Boolean @default(true)
+  
+  // Travel preferences
+  preferredDestinations String[] @default([])
+  accommodationType    String[] @default([])
+  activities           String[] @default([])
+  dietary              String[] @default([])
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("user_settings")
 }
 
 // ========== VOYAGE SERVICE MODELS ==========
