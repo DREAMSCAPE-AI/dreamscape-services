@@ -60,16 +60,16 @@ jobs:
         run: |
           node -v
           npm -v
-      - name: Install test dependencies
-        run: npm ci
-        env:
-          CI: true
-        working-directory: dreamscape-tests
       - name: Ensure package-lock.json (tests)
         run: |
           if [ ! -f package-lock.json ]; then
             npm install --package-lock-only
           fi
+        working-directory: dreamscape-tests
+      - name: Install test dependencies
+        run: npm ci
+        env:
+          CI: true
         working-directory: dreamscape-tests
       - name: Run unit tests
         run: npm run test:unit --if-present
