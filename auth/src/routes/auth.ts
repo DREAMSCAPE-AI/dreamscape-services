@@ -1,11 +1,11 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
-import { AuthService } from '../services/AuthService';
-import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { AuthService } from '@services/AuthService';
+import { authenticateToken, authenticateRefreshToken, AuthRequest } from '@middleware/auth';
+import { loginLimiter, registerLimiter, refreshLimiter } from '@middleware/rateLimiter';
 
 const router = express.Router();
 
-// Validation middleware
 const signupValidation = [
   body('email')
     .isEmail()
@@ -40,7 +40,11 @@ const loginValidation = [
     .withMessage('Please provide a valid email address'),
   body('password')
     .notEmpty()
-    .withMessage('Password is required')
+    .withMessage('Password is required'),
+  body('rememberMe')
+    .optional()
+    .isBoolean()
+    .withMessage('Remember me must be a boolean value')
 ];
 
 const changePasswordValidation = [
@@ -54,7 +58,6 @@ const changePasswordValidation = [
     .withMessage('New password must contain at least one uppercase letter, one lowercase letter, one number, and one special character')
 ];
 
-// Helper function to handle validation errors
 const handleValidationErrors = (req: express.Request, res: express.Response): boolean => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -68,19 +71,49 @@ const handleValidationErrors = (req: express.Request, res: express.Response): bo
   return false;
 };
 
+const setRefreshTokenCookie = (res: express.Response, refreshToken: string, rememberMe: boolean = false) => {
+  const maxAge = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000; // 30 days or 7 days
+  
+  res.cookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge,
+    path: '/'
+  });
+};
+
+const conditionalRateLimit = (limiter: any) => {
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (!req.headers['x-test-rate-limit']) {
+      return next();
+    }
+    return limiter(req, res, next);
+  };
+};
+
 /**
  * @route   POST /api/v1/auth/register
  * @desc    Register a new user
  * @access  Public
  */
-router.post('/register', signupValidation, async (req: express.Request, res: express.Response) => {
+router.post('/register', conditionalRateLimit(registerLimiter), signupValidation, async (req: express.Request, res: express.Response) => {
   try {
     if (handleValidationErrors(req, res)) return;
 
     const result = await AuthService.signup(req.body);
     
-    const statusCode = result.success ? 201 : 400;
-    res.status(statusCode).json(result);
+    if (result.success && result.data) {
+      setRefreshTokenCookie(res, result.data.tokens.refreshToken, false);
+      
+      const { refreshToken, ...tokensWithoutRefresh } = result.data.tokens;
+      result.data.tokens = tokensWithoutRefresh as any;
+      
+      res.status(201).json(result);
+    } else {
+      const statusCode = result.message === 'Email already exists' ? 409 : 400;
+      res.status(statusCode).json(result);
+    }
   } catch (error) {
     console.error('Signup route error:', error);
     res.status(500).json({
@@ -95,16 +128,23 @@ router.post('/register', signupValidation, async (req: express.Request, res: exp
  * @desc    Authenticate user and get token
  * @access  Public
  */
-router.post('/login', loginValidation, async (req: express.Request, res: express.Response) => {
+router.post('/login', conditionalRateLimit(loginLimiter), loginValidation, async (req: express.Request, res: express.Response) => {
   try {
     if (handleValidationErrors(req, res)) return;
 
     const result = await AuthService.login(req.body);
     
+    if (result.success && result.data) {
+      setRefreshTokenCookie(res, result.data.tokens.refreshToken, req.body.rememberMe || false);
+      
+      const { refreshToken, ...tokensWithoutRefresh } = result.data.tokens;
+      result.data.tokens = tokensWithoutRefresh as any;
+    }
+    
     const statusCode = result.success ? 200 : 401;
     res.status(statusCode).json(result);
   } catch (error) {
-    console.error('Login route error:', error);
+    console.error('Refresh token route error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -113,7 +153,7 @@ router.post('/login', loginValidation, async (req: express.Request, res: express
 });
 
 /**
- * @route   GET /api/auth/profile
+ * @route   GET /api/v1/auth/profile
  * @desc    Get current user profile
  * @access  Private
  */
@@ -141,7 +181,7 @@ router.get('/profile', authenticateToken, async (req: AuthRequest, res: express.
 });
 
 /**
- * @route   PUT /api/auth/profile
+ * @route   PUT /api/v1/auth/profile
  * @desc    Update user profile
  * @access  Private
  */
@@ -192,7 +232,7 @@ router.put('/profile', authenticateToken, [
 });
 
 /**
- * @route   POST /api/auth/change-password
+ * @route   POST /api/v1/auth/change-password
  * @desc    Change user password
  * @access  Private
  */
@@ -211,6 +251,15 @@ router.post('/change-password', authenticateToken, changePasswordValidation, asy
     const { currentPassword, newPassword } = req.body;
     const result = await AuthService.changePassword(req.user.id, currentPassword, newPassword);
     
+    if (result.success) {
+      res.clearCookie('refreshToken', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        path: '/'
+      });
+    }
+    
     const statusCode = result.success ? 200 : 400;
     res.status(statusCode).json(result);
   } catch (error) {
@@ -223,12 +272,66 @@ router.post('/change-password', authenticateToken, changePasswordValidation, asy
 });
 
 /**
- * @route   POST /api/auth/verify-token
+ * @route   POST /api/v1/auth/refresh
+ * @desc    Refresh access token using refresh token
+ * @access  Private (refresh token required)
+ */
+router.post('/refresh', conditionalRateLimit(refreshLimiter), async (req: express.Request, res: express.Response) => {
+  try {
+    let refreshToken = req.cookies?.refreshToken;
+    
+    if (!refreshToken && req.headers.cookie) {
+      const cookies = req.headers.cookie.split(';');
+      const refreshCookie = cookies.find(cookie => cookie.trim().startsWith('refreshToken='));
+      if (refreshCookie) {
+        refreshToken = refreshCookie.split('=')[1].trim();
+        refreshToken = refreshToken.split(';')[0];
+      }
+    }
+    
+    if (!refreshToken) {
+      refreshToken = req.body.refreshToken;
+    }
+    
+    console.log('=== ROUTE DEBUG ===');
+    console.log('Cookie header:', req.headers.cookie);
+    console.log('Parsed refreshToken:', refreshToken ? refreshToken.substring(0, 20) + '...' : 'NONE');
+    console.log('req.cookies:', req.cookies);
+    
+    if (!refreshToken) {
+      res.status(401).json({
+        success: false,
+        message: 'Refresh token not provided'
+      });
+      return;
+    }
+
+    const result = await AuthService.refreshToken(refreshToken);
+    
+    if (result.success && result.data) {
+      setRefreshTokenCookie(res, result.data.tokens.refreshToken, false);
+      
+      const { refreshToken: newRefreshToken, ...tokensWithoutRefresh } = result.data.tokens;
+      result.data.tokens = tokensWithoutRefresh as any;
+    }
+    
+    const statusCode = result.success ? 200 : 401;
+    res.status(statusCode).json(result);
+  } catch (error) {
+    console.error('Refresh token route error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+/**
+ * @route   POST /api/v1/auth/verify-token
  * @desc    Verify if token is valid
  * @access  Private
  */
 router.post('/verify-token', authenticateToken, (req: AuthRequest, res: express.Response) => {
-  // If we reach here, the token is valid (middleware passed)
   res.json({
     success: true,
     message: 'Token is valid',
@@ -239,17 +342,94 @@ router.post('/verify-token', authenticateToken, (req: AuthRequest, res: express.
 });
 
 /**
- * @route   POST /api/auth/logout
- * @desc    Logout user (client-side token removal)
+ * @route   POST /api/v1/auth/logout
+ * @desc    Logout user and revoke refresh token
  * @access  Private
  */
-router.post('/logout', authenticateToken, (req: AuthRequest, res: express.Response) => {
-  // Since we're using stateless JWT, logout is handled client-side
-  // This endpoint is mainly for consistency and potential future server-side logout logic
-  res.json({
-    success: true,
-    message: 'Logged out successfully'
-  });
+router.post('/logout', async (req: express.Request, res: express.Response) => {
+  try {
+    if (!req.cookies) {
+      console.error('Cookies not available - cookie-parser middleware missing?');
+      return res.status(500).json({
+        success: false,
+        message: 'Server configuration error'
+      });
+    }
+
+    const refreshToken = req.cookies.refreshToken;
+    const authHeader = req.headers.authorization;
+    const accessToken = authHeader && authHeader.split(' ')[1];
+    
+    if (refreshToken) {
+      await AuthService.logout(refreshToken, accessToken);
+    }
+    
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/'
+    });
+
+    res.json({
+      success: true,
+      message: 'Logged out successfully'
+    });
+  } catch (error) {
+    console.error('Logout route error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+/**
+ * @route   POST /api/v1/auth/logout-all
+ * @desc    Logout user from all devices
+ * @access  Private
+ */
+router.post('/logout-all', authenticateToken, async (req: AuthRequest, res: express.Response) => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
+      });
+      return;
+    }
+
+    const authHeader = req.headers.authorization;
+    const accessToken = authHeader && authHeader.split(' ')[1];
+
+    const result = await AuthService.logoutAllDevices(req.user.id, accessToken);
+    
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/'
+    });
+    
+    const statusCode = result.success ? 200 : 500;
+    res.status(statusCode).json(result);
+  } catch (error) {
+    console.error('Logout all devices route error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+router.post('/test/reset', async (req, res) => {
+  const result = await AuthService.resetTestData();
+  res.status(200).json(result);
+});
+
+router.post('/test/cleanup', async (req, res) => {
+  const result = await AuthService.resetTestData();
+  res.status(200).json(result);
 });
 
 export default router;

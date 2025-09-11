@@ -4,9 +4,10 @@ import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
-import { DatabaseService } from './database/DatabaseService';
-import activitiesRoutes from './routes/activities';
-import { rateLimiter } from './middleware/rateLimiter';
+import prisma from '../../db/client';
+// import activitiesRoutes from './routes/activities'; // TODO: Fix AmadeusService import
+import profileRoutes from './routes/profile';
+import { apiLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/errorHandler';
 
 dotenv.config();
@@ -28,10 +29,14 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Rate limiting
-app.use(rateLimiter);
+app.use(apiLimiter);
+
+// Static files for avatar uploads
+app.use('/uploads', express.static('uploads'));
 
 // Routes
-app.use('/api/v1/activities', activitiesRoutes);
+// app.use('/api/v1/activities', activitiesRoutes); // TODO: Fix AmadeusService import
+app.use('/api/v1/profile', profileRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -56,14 +61,22 @@ app.use('*', (req, res) => {
 // Start server
 const startServer = async () => {
   try {
-    await DatabaseService.connect();
-    console.log('Database connected successfully');
+    // Test database connection
+    await prisma.$connect();
+    console.log('✅ PostgreSQL database connected successfully');
+    
+    // Create uploads directory if it doesn't exist
+    const fs = require('fs');
+    const uploadsDir = 'uploads/avatars';
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
     
     app.listen(PORT, () => {
-      console.log(`User service running on port ${PORT}`);
+      console.log(`🚀 User service running on port ${PORT}`);
     });
   } catch (error) {
-    console.error('Failed to start server:', error);
+    console.error('❌ Failed to start server:', error);
     process.exit(1);
   }
 };
