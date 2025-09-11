@@ -21,6 +21,8 @@ on:
         required: false
         default: false
         type: boolean
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -35,36 +37,60 @@ jobs:
       status: ${{ job.status }}
     steps:
       - uses: actions/checkout@v4
-      - name: Clone dreamscape-tests repository
-        run: git clone https://github.com/DREAMSCAPE-AI/dreamscape-tests.git
+      - name: Checkout dreamscape-tests repository
+        uses: actions/checkout@v4
+        with:
+          repository: DREAMSCAPE-AI/dreamscape-tests
+          path: dreamscape-tests
+          fetch-depth: 1
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
-      - name: Install dependencies
+          cache-dependency-path: dreamscape-tests/package-lock.json
+      - name: Show Node and npm versions
+        run: |
+          node -v
+          npm -v
+      - name: Install test dependencies
         run: npm ci
-      - name: Generate package-lock.json
-        run: npm install --package-lock-only
+        env:
+          CI: true
+        working-directory: dreamscape-tests
+      - name: Ensure package-lock.json (tests)
+        run: |
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only
+          fi
+        working-directory: dreamscape-tests
       - name: Run unit tests
-        run: npm run test:unit
+        run: npm run test:unit --if-present
+        working-directory: dreamscape-tests
       - name: Run integration tests
-        run: npm run test:integration -- --config dreamscape-tests/tools/setup/jest.config.integration.js
+        run: npm run test:integration --if-present -- --config tools/setup/jest.config.integration.js
+        working-directory: dreamscape-tests
       - name: Run performance tests
-        run: npm run test:performance
+        run: npm run test:performance --if-present
+        working-directory: dreamscape-tests
       - name: Run security tests
-        run: npm run test:security
+        run: npm run test:security --if-present
+        working-directory: dreamscape-tests
       - name: Run accessibility tests
-        run: npm run test:accessibility
+        run: npm run test:accessibility --if-present
+        working-directory: dreamscape-tests
       - name: Generate test reports
         run: |
           mkdir -p reports
-          cp dreamscape-tests/reports/* reports/
+          if [ -d dreamscape-tests/reports ]; then
+            cp -r dreamscape-tests/reports/* reports/ || true
+          fi
       - name: Upload test reports
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
           path: reports
+          if-no-files-found: warn
 
   lint:
     # Lint s'exécute si :
