@@ -48,7 +48,14 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: dreamscape-tests/package-lock.json
+          cache-dependency-path: |
+            dreamscape-tests/package.json
+            ai/package.json
+            auth/package.json
+            db/package.json
+            payment/package.json
+            user/package.json
+            voyage/package.json
       - name: Show Node and npm versions
         run: |
           node -v
