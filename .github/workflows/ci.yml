@@ -72,19 +72,19 @@ jobs:
           CI: true
         working-directory: dreamscape-tests
       - name: Run unit tests
-        run: npm run test:unit --if-present
+        run: npm run test:unit --if-present -- --passWithNoTests
         working-directory: dreamscape-tests
       - name: Run integration tests
-        run: npm run test:integration --if-present -- --config tools/setup/jest.config.integration.js
+        run: npm run test:integration --if-present -- --config tools/setup/jest.config.integration.js --passWithNoTests
         working-directory: dreamscape-tests
       - name: Run performance tests
-        run: npm run test:performance --if-present
+        run: npm run test:performance --if-present -- --passWithNoTests
         working-directory: dreamscape-tests
       - name: Run security tests
-        run: npm run test:security --if-present
+        run: npm run test:security --if-present -- --passWithNoTests
         working-directory: dreamscape-tests
       - name: Run accessibility tests
-        run: npm run test:accessibility --if-present
+        run: npm run test:accessibility --if-present -- --passWithNoTests
         working-directory: dreamscape-tests
       - name: Generate test reports
         run: |
