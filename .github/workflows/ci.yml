@@ -1,0 +1,209 @@
+name: CI Pipeline
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      skip_to_job:
+        description: 'Skip to specific job (test, lint, build, all)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - test
+          - lint
+          - build
+      force_run:
+        description: 'Force run all jobs regardless of previous failures'
+        required: false
+        default: false
+        type: boolean
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # Le job test s'exécute toujours sauf si on skip explicitement vers un autre job
+    if: |
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.skip_to_job == 'all' ||
+      github.event.inputs.skip_to_job == 'test' ||
+      github.event.inputs.force_run == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ job.status }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout dreamscape-tests repository
+        uses: actions/checkout@v4
+        with:
+          repository: DREAMSCAPE-AI/dreamscape-tests
+          path: dreamscape-tests
+          fetch-depth: 1
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            dreamscape-tests/package.json
+            ai/package.json
+            auth/package.json
+            db/package.json
+            payment/package.json
+            user/package.json
+            voyage/package.json
+      - name: Show Node and npm versions
+        run: |
+          node -v
+          npm -v
+      - name: Ensure package-lock.json (tests)
+        run: |
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only
+          fi
+        working-directory: dreamscape-tests
+      - name: Install test dependencies
+        run: npm ci
+        env:
+          CI: true
+        working-directory: dreamscape-tests
+      - name: Install auth dependencies
+        run: |
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only
+          fi
+          npm ci
+        working-directory: auth
+      - name: Start auth service
+        run: npm run dev &
+        working-directory: auth
+        env:
+          DATABASE_URL: postgresql://localhost:5432/test
+      - name: Run unit tests
+        run: npm run test:unit --if-present -- --passWithNoTests
+        working-directory: dreamscape-tests
+      - name: Run integration tests
+        env:
+          AUTH_SERVICE_URL: http://localhost:3001
+        run: npm run test:integration --if-present -- --config tools/setup/jest.config.integration.js --passWithNoTests
+        working-directory: dreamscape-tests
+      - name: Run performance tests
+        run: npm run test:performance --if-present -- --passWithNoTests
+        working-directory: dreamscape-tests
+      - name: Run security tests
+        run: npm run test:security --if-present -- --passWithNoTests
+        working-directory: dreamscape-tests
+      - name: Run accessibility tests
+        run: npm run test:accessibility --if-present -- --passWithNoTests
+        working-directory: dreamscape-tests
+      - name: Stop auth service
+        if: always()
+        run: pkill -f "tsx watch src/server.ts" || true
+      - name: Generate test reports
+        run: |
+          mkdir -p reports
+          if [ -d dreamscape-tests/reports ]; then
+            cp -r dreamscape-tests/reports/* reports/ || true
+          fi
+      - name: Upload test reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: reports
+          if-no-files-found: warn
+
+  lint:
+    # Lint s'exécute si :
+    # - Ce n'est pas un workflow_dispatch ET test réussit
+    # - OU c'est un workflow_dispatch avec les bonnes conditions
+    if: |
+      (github.event_name != 'workflow_dispatch' && needs.test.result == 'success') ||
+      (github.event_name == 'workflow_dispatch' && (
+        github.event.inputs.skip_to_job == 'all' ||
+        github.event.inputs.skip_to_job == 'lint' ||
+        github.event.inputs.force_run == 'true'
+      ))
+    needs: [test]
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ job.status }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run ESLint
+        run: npm run lint
+
+  build:
+    # Build s'exécute si :
+    # - Ce n'est pas un workflow_dispatch ET test + lint réussissent
+    # - OU c'est un workflow_dispatch avec les bonnes conditions
+    if: |
+      (github.event_name != 'workflow_dispatch' && needs.test.result == 'success' && needs.lint.result == 'success') ||
+      (github.event_name == 'workflow_dispatch' && (
+        github.event.inputs.skip_to_job == 'all' ||
+        github.event.inputs.skip_to_job == 'build' ||
+        github.event.inputs.force_run == 'true'
+      ))
+    needs: [test, lint]
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ job.status }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Build project
+        run: npm run build
+
+  notify-failure:
+    if: |
+      always() && (
+        needs.test.result == 'failure' ||
+        needs.lint.result == 'failure' ||
+        needs.build.result == 'failure'
+      )
+    needs: [test, lint, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify on failure
+        run: |
+          echo "❌ CI Pipeline failed!"
+          echo "Job results:"
+          echo "  - Test: ${{ needs.test.result }}"
+          echo "  - Lint: ${{ needs.lint.result }}"
+          echo "  - Build: ${{ needs.build.result }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo ""
+          echo "💡 Pour relancer manuellement les jobs qui n'ont pas pu s'exécuter:"
+          echo "   1. Allez dans l'onglet Actions de votre repository"
+          echo "   2. Cliquez sur 'Run workflow'"
+          echo "   3. Sélectionnez le job à partir duquel relancer"
+          # Ici vous pourrez ajouter une notification Slack/Teams plus tard
+
+  notify-manual-run:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify manual run info
+        run: |
+          echo "🔧 Exécution manuelle déclenchée"
+          echo "Skip to job: ${{ github.event.inputs.skip_to_job }}"
+          echo "Force run: ${{ github.event.inputs.force_run }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
