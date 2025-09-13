@@ -28,8 +28,8 @@ jobs:
   test:
     # Le job test s'exécute toujours sauf si on skip explicitement vers un autre job
     if: |
-      github.event_name != 'workflow_dispatch' || 
-      github.event.inputs.skip_to_job == 'all' || 
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.skip_to_job == 'all' ||
       github.event.inputs.skip_to_job == 'test' ||
       github.event.inputs.force_run == 'true'
     runs-on: ubuntu-latest
@@ -71,10 +71,24 @@ jobs:
         env:
           CI: true
         working-directory: dreamscape-tests
+      - name: Install auth dependencies
+        run: |
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only
+          fi
+          npm ci
+        working-directory: auth
+      - name: Start auth service
+        run: npm run dev &
+        working-directory: auth
+        env:
+          DATABASE_URL: postgresql://localhost:5432/test
       - name: Run unit tests
         run: npm run test:unit --if-present -- --passWithNoTests
         working-directory: dreamscape-tests
       - name: Run integration tests
+        env:
+          AUTH_SERVICE_URL: http://localhost:3001
         run: npm run test:integration --if-present -- --config tools/setup/jest.config.integration.js --passWithNoTests
         working-directory: dreamscape-tests
       - name: Run performance tests
@@ -86,6 +100,9 @@ jobs:
       - name: Run accessibility tests
         run: npm run test:accessibility --if-present -- --passWithNoTests
         working-directory: dreamscape-tests
+      - name: Stop auth service
+        if: always()
+        run: pkill -f "tsx watch src/server.ts" || true
       - name: Generate test reports
         run: |
           mkdir -p reports
@@ -106,7 +123,7 @@ jobs:
     if: |
       (github.event_name != 'workflow_dispatch' && needs.test.result == 'success') ||
       (github.event_name == 'workflow_dispatch' && (
-        github.event.inputs.skip_to_job == 'all' || 
+        github.event.inputs.skip_to_job == 'all' ||
         github.event.inputs.skip_to_job == 'lint' ||
         github.event.inputs.force_run == 'true'
       ))
@@ -133,7 +150,7 @@ jobs:
     if: |
       (github.event_name != 'workflow_dispatch' && needs.test.result == 'success' && needs.lint.result == 'success') ||
       (github.event_name == 'workflow_dispatch' && (
-        github.event.inputs.skip_to_job == 'all' || 
+        github.event.inputs.skip_to_job == 'all' ||
         github.event.inputs.skip_to_job == 'build' ||
         github.event.inputs.force_run == 'true'
       ))
@@ -156,8 +173,8 @@ jobs:
   notify-failure:
     if: |
       always() && (
-        needs.test.result == 'failure' || 
-        needs.lint.result == 'failure' || 
+        needs.test.result == 'failure' ||
+        needs.lint.result == 'failure' ||
         needs.build.result == 'failure'
       )
     needs: [test, lint, build]
