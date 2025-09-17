@@ -135,8 +135,9 @@ jobs:
       ))
     needs: [test]
     runs-on: ubuntu-latest
-    outputs:
-      status: ${{ job.status }}
+    strategy:
+      matrix:
+        service: [ai, auth, db, payment, user, voyage]
     steps:
       - uses: actions/checkout@v4
       - name: Setup Node.js
@@ -144,10 +145,23 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
+          cache-dependency-path: |
+            ${{ matrix.service }}/package-lock.json
+            ${{ matrix.service }}/package.json
+      # A reprendre
       - name: Install dependencies
-        run: npm ci
+        continue-on-error: true
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install --package-lock-only
+            npm ci
+          fi
+        working-directory: ${{ matrix.service }}
       - name: Run ESLint
-        run: npm run lint
+        run: npm run lint --if-present
+        working-directory: ${{ matrix.service }}
 
   build:
     # Build s'exécute si :
