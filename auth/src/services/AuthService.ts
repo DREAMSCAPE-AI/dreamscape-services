@@ -143,9 +143,7 @@ export class AuthService {
     data?: { tokens: TokenPair };
   }> {
     try {
-      console.log('=== REFRESH TOKEN DEBUG ===');
-      console.log('Received token:', refreshToken.substring(0, 20) + '...');
-      
+     
       const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
       
       if (!jwtRefreshSecret) {
@@ -159,7 +157,7 @@ export class AuthService {
       };
   
       if (decoded.type !== 'refresh') {
-        console.log('Invalid token type:', decoded.type);
+      
         return {
           success: false,
           message: 'Invalid token type'
@@ -169,7 +167,6 @@ export class AuthService {
       const sessionCount = await prisma.session.count({
         where: { token: refreshToken }
       });
-      console.log('Sessions with this token:', sessionCount);
   
       const sessionRecord = await prisma.session.findFirst({
         where: {
@@ -186,33 +183,28 @@ export class AuthService {
         }
       });
   
-      console.log('Session found:', !!sessionRecord);
-      console.log('Session ID:', sessionRecord?.id);
   
       if (!sessionRecord) {
-        console.log('No session record found for token');
         return {
           success: false,
           message: 'Invalid or expired refresh token'
         };
       }
   
-      console.log('Deleting session:', sessionRecord.id);
+     
       const deleteResult = await prisma.session.delete({
         where: { id: sessionRecord.id }
       });
-      console.log('Delete result:', deleteResult);
+     
   
       const remainingSessions = await prisma.session.count({
         where: { token: refreshToken }
       });
-      console.log('Remaining sessions with this token after delete:', remainingSessions);
+     
   
       const isLongLived = sessionRecord.expiresAt > new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       const tokens = await this.generateTokenPair(decoded.userId, decoded.email, isLongLived);
       
-      console.log('New tokens generated');
-      console.log('=== END REFRESH TOKEN DEBUG ===');
   
       return {
         success: true,
