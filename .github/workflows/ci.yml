@@ -145,9 +145,7 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: |
-            ${{ matrix.service }}/package-lock.json
-            ${{ matrix.service }}/package.json
+          cache-dependency-path: ${{ matrix.service }}/package.json
       # A reprendre
       - name: Install dependencies
         continue-on-error: true
@@ -194,9 +192,7 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: |
-            ${{ matrix.service }}/package-lock.json
-            ${{ matrix.service }}/package.json
+          cache-dependency-path: ${{ matrix.service }}/package.json
       - name: Install dependencies
         run: |
           if [ -f package-lock.json ]; then
