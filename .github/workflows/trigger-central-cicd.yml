@@ -27,6 +27,31 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check secret availability
+        id: check_secrets
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # For PRs, check if we have access to secrets
+            if [[ -z "${{ secrets.DISPATCH_TOKEN }}" ]]; then
+              echo "⚠️ DISPATCH_TOKEN not available for this PR (this is normal for security)"
+              echo "secret_available=false" >> $GITHUB_OUTPUT
+              echo "skip_reason=Secrets not available for PR" >> $GITHUB_OUTPUT
+            else
+              echo "✅ DISPATCH_TOKEN is available"
+              echo "secret_available=true" >> $GITHUB_OUTPUT
+            fi
+          else
+            # For pushes to branches, secrets should be available
+            if [[ -z "${{ secrets.DISPATCH_TOKEN }}" ]]; then
+              echo "❌ DISPATCH_TOKEN not configured for this repository"
+              echo "secret_available=false" >> $GITHUB_OUTPUT
+              echo "skip_reason=DISPATCH_TOKEN secret not configured" >> $GITHUB_OUTPUT
+            else
+              echo "✅ DISPATCH_TOKEN is available"
+              echo "secret_available=true" >> $GITHUB_OUTPUT
+            fi
+          fi
+
       - name: Detect changed services
         id: changes
         run: |
@@ -95,8 +120,16 @@ jobs:
           echo "environment=${ENVIRONMENT}" >> $GITHUB_OUTPUT
           echo "Target environment: $ENVIRONMENT"
 
+      - name: Skip dispatch notification
+        if: steps.changes.outputs.changed_services != '' && steps.check_secrets.outputs.secret_available == 'false'
+        run: |
+          echo "ℹ️ Central CI/CD pipeline dispatch skipped"
+          echo "Reason: ${{ steps.check_secrets.outputs.skip_reason }}"
+          echo "This is expected behavior for PRs from forks or when secrets are not configured"
+          echo "The pipeline will run normally after merge to main/develop"
+
       - name: Trigger central CI/CD pipeline
-        if: steps.changes.outputs.changed_services != ''
+        if: steps.changes.outputs.changed_services != '' && steps.check_secrets.outputs.secret_available == 'true'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.DISPATCH_TOKEN }}
@@ -214,6 +247,8 @@ jobs:
           if [[ "${{ needs.trigger-central-pipeline.result }}" == "success" ]]; then
             echo "✅ Central CI/CD pipeline successfully triggered"
             echo "🔗 Check progress: https://github.com/DREAMSCAPE-AI/dreamscape-infra/actions"
+          elif [[ "${{ needs.trigger-central-pipeline.result }}" == "skipped" ]]; then
+            echo "ℹ️ Central pipeline dispatch skipped (normal for PRs)"
           else
             echo "❌ Failed to trigger central CI/CD pipeline"
           fi
