@@ -237,8 +237,8 @@ router.put('/', authenticateToken, async (req: AuthRequest, res: Response): Prom
         where: { userId },
         create: {
           userId,
-          firstName: '',
-          lastName: '',
+          firstName: null,
+          lastName: null,
           avatar: profile.photo
         },
         update: {
