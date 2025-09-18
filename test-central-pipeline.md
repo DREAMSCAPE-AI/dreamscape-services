@@ -8,4 +8,8 @@ Expected flow:
 3. Central pipeline processes the event
 4. Commit status is updated from "pending" to "success"
 
-Test timestamp: 2025-09-18 19:55 UTC
+Test timestamp: 2025-09-18 20:16 UTC
+
+## Update: Permissions Fixed
+- Fixed DISPATCH_TOKEN permissions for cross-repo commit status updates
+- Should now work correctly!
