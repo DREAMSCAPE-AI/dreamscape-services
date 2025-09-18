@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { prisma } from '../../../db/client';
+import { prisma } from '@dreamscape/db';
 
 export interface AuthRequest extends Request {
   user?: {

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { prisma } from '../../../db/client';
+import { prisma } from '@dreamscape/db';
 import multer from 'multer';
 import path from 'path';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
