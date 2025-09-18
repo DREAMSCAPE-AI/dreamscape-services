@@ -24,8 +24,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: '${{ matrix.service }}/package-lock.json'
 
       - name: Check if service exists
         id: check_service
@@ -113,8 +111,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: '${{ matrix.service }}/package-lock.json'
 
       - name: Check if service exists
         id: check_service
@@ -178,8 +174,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: '${{ matrix.service }}/package-lock.json'
 
       - name: Check if service exists
         id: check_service
