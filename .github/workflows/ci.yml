@@ -256,3 +256,35 @@ jobs:
           else
             echo "❌ Some services CI checks failed"
           fi
+
+  trigger-cd:
+    name: Trigger CD Pipeline
+    runs-on: ubuntu-latest
+    needs: [lint, test, build, summary]
+    if: success() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    steps:
+      - name: Determine environment
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "environment=staging" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            echo "environment=dev" >> $GITHUB_OUTPUT
+          else
+            echo "environment=dev" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Trigger Repository Dispatch
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.DISPATCH_TOKEN }}
+          repository: DREAMSCAPE-AI/dreamscape-infra
+          event-type: services-changed
+          client-payload: |
+            {
+              "component": "all",
+              "environment": "${{ steps.env.outputs.environment }}",
+              "source_repo": "${{ github.repository }}",
+              "source_sha": "${{ github.sha }}",
+              "trigger_type": "${{ github.event_name }}"
+            }
