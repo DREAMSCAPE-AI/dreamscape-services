@@ -1,4 +1,4 @@
-🔧 DreamScape Backend Services
+# 🔧 DreamScape Backend Services
 
 > **Microservices Backend Platform** - Tous les services backend DreamScape
 
@@ -109,6 +109,14 @@ npm run lint
 npm run lint:fix
 ```
 
+## 🧪 CI/CD Pipeline
+
+Utilise **Repository Dispatch** pour déclencher des tests complets dans `dreamscape-tests`:
+- ✅ Lint & Build local
+- 🚀 Tests unitaires & couverture
+- 🔗 Tests d'intégration cross-services
+- 🎭 Tests end-to-end complets
+
 ## 🚀 Déploiement
 
 ```bash
@@ -190,4 +198,3 @@ cd terraform && terraform apply
 ## 📄 License
 
 Propriétaire et confidentiel © DreamScape 2025
-
