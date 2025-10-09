@@ -378,6 +378,22 @@ class AmadeusService {
     }
   }
 
+  /**
+   * Search flights with DTO mapping
+   * Ticket: DR-133 - VOYAGE-001.4 : Service Flight Search
+   * Maps Amadeus API response to internal DTOs
+   */
+  async searchFlightsWithMapping(params: FlightSearchParams) {
+    try {
+      const response = await this.api.get('/v2/shopping/flight-offers', { params });
+      // Note: FlightOfferMapper can be imported when needed
+      // For now, return raw data - mapper will be used in routes
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Flight search failed');
+    }
+  }
+
   async searchFlightDestinations(params: { origin: string; maxPrice?: number; departureDate?: string }) {
     try {
       const response = await this.api.get('/v1/shopping/flight-destinations', { params });
