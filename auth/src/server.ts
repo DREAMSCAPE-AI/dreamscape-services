@@ -32,12 +32,38 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use('/api/v1/auth', router);
 
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'auth-service',
-    timestamp: new Date().toISOString()
-  });
+app.get('/health', async (req, res) => {
+  const dbService = DatabaseService.getInstance();
+  const startTime = process.uptime();
+
+  try {
+    // Check database connectivity
+    const dbHealthy = await dbService.healthCheck();
+
+    res.json({
+      status: 'ok',
+      service: 'auth-service',
+      version: process.env.npm_package_version || '1.0.0',
+      timestamp: new Date().toISOString(),
+      uptime: Math.floor(startTime),
+      environment: process.env.NODE_ENV || 'development',
+      database: {
+        postgresql: dbHealthy.postgresql || false,
+        mongodb: dbHealthy.mongodb || false
+      },
+      memory: {
+        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024)
+      }
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'degraded',
+      service: 'auth-service',
+      timestamp: new Date().toISOString(),
+      error: 'Database health check failed'
+    });
+  }
 });
 
 app.use(errorHandler);
