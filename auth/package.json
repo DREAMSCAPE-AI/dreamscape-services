@@ -63,5 +63,6 @@
     "backend"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "_test": "E2E workflow test - trigger CI pipeline"
 }
