@@ -202,9 +202,14 @@ jobs:
           if [[ "${{ needs.detect-changes.outputs.has_changes }}" == "false" ]]; then
             echo "✅ No service changes detected, skipping tests"
             exit 0
-          elif [[ "${{ needs.lint-and-build.result }}" == "success" && "${{ needs.trigger-comprehensive-tests.result }}" == "success" ]]; then
+          elif [[ "${{ needs.lint-and-build.result }}" == "success" ]]; then
             echo "✅ CI pipeline completed successfully"
-            echo "📋 Comprehensive tests triggered in dreamscape-tests repository"
+            echo "📋 Lint & Build: ${{ needs.lint-and-build.result }}"
+            if [[ "${{ needs.trigger-comprehensive-tests.result }}" == "success" ]]; then
+              echo "📋 Comprehensive tests triggered in dreamscape-tests repository"
+            else
+              echo "⚠️  Repository Dispatch: ${{ needs.trigger-comprehensive-tests.result }} (non-blocking)"
+            fi
             exit 0
           else
             echo "❌ CI pipeline failed:"
