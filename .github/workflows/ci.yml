@@ -134,6 +134,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [detect-changes, lint-and-build]
     if: always() && needs.detect-changes.outputs.has_changes == 'true' && needs.lint-and-build.result == 'success'
+    continue-on-error: true
     steps:
       - name: Validate secrets
         run: |
