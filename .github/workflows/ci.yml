@@ -54,7 +54,7 @@ jobs:
           echo "$changed_files"
 
           services=()
-          for service in auth user ai payment voyage; do
+          for service in auth user ai payment voyage test-service; do
             if echo "$changed_files" | grep -q "^${service}/"; then
               services+=("\"$service\"")
               echo "✅ Service $service has changes"
@@ -98,7 +98,17 @@ jobs:
         run: |
           if [ -f "${{ matrix.service }}/package.json" ]; then
             cd ${{ matrix.service }}
-            npm ci
+            # Use npm ci if package-lock.json exists, otherwise npm install
+            if [ -f "package-lock.json" ]; then
+              echo "📦 Found package-lock.json - using npm ci"
+              npm ci
+            elif [ -f "yarn.lock" ]; then
+              echo "📦 Found yarn.lock - using yarn install"
+              yarn install --frozen-lockfile
+            else
+              echo "⚠️  No lock file found - using npm install"
+              npm install
+            fi
           else
             echo "No package.json found for ${{ matrix.service }}"
             exit 1
@@ -127,16 +137,16 @@ jobs:
     steps:
       - name: Validate secrets
         run: |
-          if [ -z "${{ secrets.CI_CLONE_TOKEN }}" ]; then
-            echo "❌ CI_CLONE_TOKEN secret is not configured"
+          if [ -z "${{ secrets.DISPATCH_TOKEN }}" ]; then
+            echo "❌ DISPATCH_TOKEN secret is not configured"
             exit 1
           fi
-          echo "✅ CI_CLONE_TOKEN is configured"
+          echo "✅ DISPATCH_TOKEN is configured"
 
       - name: Trigger tests in dreamscape-tests
         uses: peter-evans/repository-dispatch@v2
         with:
-          token: ${{ secrets.CI_CLONE_TOKEN }}
+          token: ${{ secrets.DISPATCH_TOKEN }}
           repository: ${{ env.ORG }}/dreamscape-tests
           event-type: test-request
           client-payload: |
