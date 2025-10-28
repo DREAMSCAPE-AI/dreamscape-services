@@ -98,7 +98,17 @@ jobs:
         run: |
           if [ -f "${{ matrix.service }}/package.json" ]; then
             cd ${{ matrix.service }}
-            npm ci
+            # Use npm ci if package-lock.json exists, otherwise npm install
+            if [ -f "package-lock.json" ]; then
+              echo "📦 Found package-lock.json - using npm ci"
+              npm ci
+            elif [ -f "yarn.lock" ]; then
+              echo "📦 Found yarn.lock - using yarn install"
+              yarn install --frozen-lockfile
+            else
+              echo "⚠️  No lock file found - using npm install"
+              npm install
+            fi
           else
             echo "No package.json found for ${{ matrix.service }}"
             exit 1
