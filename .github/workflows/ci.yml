@@ -68,6 +68,11 @@ jobs:
           else
             echo "has_changes=true" >> $GITHUB_OUTPUT
             services_json="[$(IFS=,; echo "${services[*]}")]"
+            # Validate JSON format
+            if ! echo "$services_json" | jq empty 2>/dev/null; then
+              echo "❌ Invalid JSON generated: $services_json"
+              exit 1
+            fi
             echo "services=$services_json" >> $GITHUB_OUTPUT
             echo "✅ Changed services: $services_json"
           fi
@@ -87,7 +92,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
       - name: Install dependencies for ${{ matrix.service }}
         run: |
@@ -120,6 +125,14 @@ jobs:
     needs: [detect-changes, lint-and-build]
     if: always() && needs.detect-changes.outputs.has_changes == 'true' && needs.lint-and-build.result == 'success'
     steps:
+      - name: Validate secrets
+        run: |
+          if [ -z "${{ secrets.CI_CLONE_TOKEN }}" ]; then
+            echo "❌ CI_CLONE_TOKEN secret is not configured"
+            exit 1
+          fi
+          echo "✅ CI_CLONE_TOKEN is configured"
+
       - name: Trigger tests in dreamscape-tests
         uses: peter-evans/repository-dispatch@v2
         with:
