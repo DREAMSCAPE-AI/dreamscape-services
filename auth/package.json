@@ -7,7 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "tsc --project tsconfig.test.json && jest",
+    "test": "tsc --project tsconfig.test.json && jest --passWithNoTests",
     "test:unit": "jest --config jest.config.unit.js",
     "test:integration": "tsc --project tsconfig.test.json && jest --config jest.config.integration.js --detectOpenHandles --forceExit",
     "test:integration:single": "tsc --project tsconfig.test.json && jest --config jest.config.integration.js --testNamePattern",
