@@ -31,6 +31,8 @@
     "node_modules",
     "dist",
     "**/*.test.ts",
-    "**/*.spec.ts"
+    "**/*.spec.ts",
+    "src/database/seed.ts",
+    "../db/seed.ts"
   ]
 }
