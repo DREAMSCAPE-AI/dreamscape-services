@@ -50,8 +50,7 @@ app.get('/health', async (req, res) => {
       uptime: Math.floor(startTime),
       environment: process.env.NODE_ENV || 'development',
       database: {
-        postgresql: dbHealthy.postgresql || false,
-        mongodb: dbHealthy.mongodb || false
+        postgresql: dbHealthy.postgresql || false
       },
       cache: {
         redis: redisHealthy
@@ -89,7 +88,6 @@ const startServer = async () => {
     if (initResult.success) {
       console.log('✅ Database initialized successfully');
       console.log(`📊 PostgreSQL: ${initResult.postgresql ? '✅' : '❌'}`);
-      console.log(`📊 MongoDB: ${initResult.mongodb ? '✅' : '⚠️ (non-critical)'}`);
     } else {
       console.error('❌ Database initialization failed:', initResult.errors);
       throw new Error(`Database initialization failed: ${initResult.errors.join(', ')}`);
