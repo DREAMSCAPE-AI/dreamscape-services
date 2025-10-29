@@ -1,13 +1,7 @@
-export enum Role {
-    USER = 'USER',
-    ADMIN = 'ADMIN',
-    MODERATOR = 'MODERATOR'
-}
-
-export enum UserCategory {
-    LEISURE = 'LEISURE',
-    BUSINESS = 'BUSINESS'
-}
+// Use string literal types that match Prisma enums
+// This avoids type conflicts while maintaining compatibility
+export type Role = 'USER' | 'ADMIN' | 'MODERATOR';
+export type UserCategory = 'LEISURE' | 'BUSINESS';
 
 export interface User {
     id: string;
