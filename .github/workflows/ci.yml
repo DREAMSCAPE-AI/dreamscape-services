@@ -94,6 +94,15 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install shared db dependencies
+        run: |
+          if [ -f "db/package.json" ]; then
+            echo "📦 Installing shared db package dependencies..."
+            cd db
+            npm ci
+            cd ..
+          fi
+
       - name: Install dependencies for ${{ matrix.service }}
         run: |
           if [ -f "${{ matrix.service }}/package.json" ]; then
