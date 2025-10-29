@@ -54,7 +54,7 @@ jobs:
           echo "$changed_files"
 
           services=()
-          for service in auth-service user-service ai-service payment-service voyage-service; do
+          for service in auth user ai payment voyage; do
             if echo "$changed_files" | grep -q "^${service}/"; then
               services+=("\"$service\"")
               echo "✅ Service $service has changes"
