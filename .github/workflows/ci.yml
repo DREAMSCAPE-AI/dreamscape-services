@@ -1,0 +1,227 @@
+name: Services CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ci-services-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ORG: DREAMSCAPE-AI
+
+jobs:
+  detect-changes:
+    name: Detect Service Changes
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.changes.outputs.services }}
+      has_changes: ${{ steps.changes.outputs.has_changes }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed services
+        id: changes
+        run: |
+          # Détecter les services modifiés
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
+          else
+            if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+              # Premier push de la branche
+              base_sha="$(git rev-parse HEAD~1 2>/dev/null || echo "HEAD")"
+            else
+              base_sha="${{ github.event.before }}"
+            fi
+            head_sha="${{ github.sha }}"
+          fi
+
+          echo "Comparing ${base_sha}..${head_sha}"
+
+          changed_files=$(git diff --name-only $base_sha $head_sha || git diff --name-only HEAD~1 HEAD || true)
+          echo "Changed files:"
+          echo "$changed_files"
+
+          services=()
+          for service in auth user ai payment voyage; do
+            if echo "$changed_files" | grep -q "^${service}/"; then
+              services+=("\"$service\"")
+              echo "✅ Service $service has changes"
+            fi
+          done
+
+          if [ ${#services[@]} -eq 0 ]; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "services=[]" >> $GITHUB_OUTPUT
+            echo "❌ No service changes detected"
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            services_json="[$(IFS=,; echo "${services[*]}")]"
+            # Validate JSON format
+            if ! echo "$services_json" | jq empty 2>/dev/null; then
+              echo "❌ Invalid JSON generated: $services_json"
+              exit 1
+            fi
+            echo "services=$services_json" >> $GITHUB_OUTPUT
+            echo "✅ Changed services: $services_json"
+          fi
+
+  lint-and-build:
+    name: Lint & Build
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.has_changes == 'true'
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.detect-changes.outputs.services) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install shared db dependencies
+        run: |
+          if [ -f "db/package.json" ]; then
+            echo "📦 Installing shared db package dependencies..."
+            cd db
+            if [ -f "package-lock.json" ]; then
+              npm ci
+            else
+              npm install
+            fi
+            cd ..
+          fi
+
+      - name: Install dependencies for ${{ matrix.service }}
+        run: |
+          if [ -f "${{ matrix.service }}/package.json" ]; then
+            cd ${{ matrix.service }}
+            # Use npm ci if package-lock.json exists, otherwise npm install
+            if [ -f "package-lock.json" ]; then
+              echo "📦 Found package-lock.json - using npm ci"
+              npm ci
+            elif [ -f "yarn.lock" ]; then
+              echo "📦 Found yarn.lock - using yarn install"
+              yarn install --frozen-lockfile
+            else
+              echo "⚠️  No lock file found - using npm install"
+              npm install
+            fi
+          else
+            echo "No package.json found for ${{ matrix.service }}"
+            exit 1
+          fi
+
+      - name: Lint ${{ matrix.service }}
+        run: |
+          cd ${{ matrix.service }}
+          npm run lint --if-present
+
+      - name: Build ${{ matrix.service }}
+        run: |
+          cd ${{ matrix.service }}
+          npm run build --if-present
+
+      - name: Run local unit tests for ${{ matrix.service }}
+        run: |
+          cd ${{ matrix.service }}
+          npm test --if-present
+
+  trigger-comprehensive-tests:
+    name: Trigger Comprehensive Tests
+    runs-on: ubuntu-latest
+    needs: [detect-changes, lint-and-build]
+    if: always() && needs.detect-changes.outputs.has_changes == 'true' && needs.lint-and-build.result == 'success'
+    steps:
+      - name: Validate secrets
+        run: |
+          if [ -z "${{ secrets.CI_CLONE_TOKEN }}" ]; then
+            echo "❌ CI_CLONE_TOKEN secret is not configured"
+            exit 1
+          fi
+          echo "✅ CI_CLONE_TOKEN is configured"
+
+      - name: Trigger tests in dreamscape-tests
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.CI_CLONE_TOKEN }}
+          repository: ${{ env.ORG }}/dreamscape-tests
+          event-type: test-request
+          client-payload: |
+            {
+              "repository": "dreamscape-services",
+              "branch": "${{ github.head_ref || github.ref_name }}",
+              "sha": "${{ github.sha }}",
+              "services": ${{ needs.detect-changes.outputs.services }},
+              "trigger": "ci",
+              "pr_number": "${{ github.event.pull_request.number || '' }}"
+            }
+
+      - name: Create test status comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const services = ${{ needs.detect-changes.outputs.services }};
+            const comment = `
+            🧪 **Comprehensive Tests Triggered**
+
+            **Repository:** dreamscape-services
+            **Branch:** \`${{ github.head_ref || github.ref_name }}\`
+            **Services:** ${services.join(', ')}
+
+            Tests are running in [dreamscape-tests repository](https://github.com/${{ env.ORG }}/dreamscape-tests/actions).
+
+            The following tests will be executed:
+            - ✅ Local lint & build (completed)
+            - 🔄 Unit tests with coverage
+            - 🔄 Cross-service integration tests
+            - 🔄 End-to-end tests
+
+            Results will be available shortly...
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  # Agrégateur pour les branch protection rules
+  test:
+    name: CI Tests
+    runs-on: ubuntu-latest
+    needs: [detect-changes, lint-and-build, trigger-comprehensive-tests]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ needs.detect-changes.outputs.has_changes }}" == "false" ]]; then
+            echo "✅ No service changes detected, skipping tests"
+            exit 0
+          elif [[ "${{ needs.lint-and-build.result }}" == "success" && "${{ needs.trigger-comprehensive-tests.result }}" == "success" ]]; then
+            echo "✅ CI pipeline completed successfully"
+            echo "📋 Comprehensive tests triggered in dreamscape-tests repository"
+            exit 0
+          else
+            echo "❌ CI pipeline failed:"
+            echo "  Lint & Build: ${{ needs.lint-and-build.result }}"
+            echo "  Trigger Tests: ${{ needs.trigger-comprehensive-tests.result }}"
+            exit 1
+          fi

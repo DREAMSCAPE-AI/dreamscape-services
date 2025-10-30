@@ -1,5 +1,5 @@
 import prisma from './prisma.js';
-import { connectMongoDB } from './mongodb.js';
+// import { connectMongoDB } from './mongodb.js'; // MongoDB not used in auth service
 import bcrypt from 'bcryptjs';
 
 async function seedPopularDestinations() {
@@ -204,8 +204,8 @@ async function main() {
   try {
     console.log('Starting database seeding...');
     
-    // Connect to MongoDB
-    await connectMongoDB();
+    // Note: MongoDB not used in auth service
+    // await connectMongoDB();
     
     // Seed PostgreSQL data
     await seedPopularDestinations();

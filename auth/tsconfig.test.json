@@ -3,15 +3,17 @@
   "compilerOptions": {
     "types": ["jest", "node"],
     "esModuleInterop": true,
-    "rootDir": ".",
     "skipLibCheck": true,
     "lib": ["es2020", "dom"]
   },
   "include": [
     "src/**/*",
-    "tests/**/*.ts"
+    "tests/**/*.ts",
+    "../db/**/*"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "src/database/seed.ts",
+    "../db/seed.ts"
   ]
 }

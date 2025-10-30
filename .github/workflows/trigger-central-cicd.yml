@@ -1,0 +1,254 @@
+# Repository Dispatch CI/CD Trigger for Services
+
+name: Trigger Central CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop, feature/**, bugfix/**, hotfix/**]
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+env:
+  CENTRAL_REPO: DREAMSCAPE-AI/dreamscape-infra
+
+jobs:
+  trigger-central-pipeline:
+    name: Trigger Central CI/CD
+    runs-on: ubuntu-latest
+    # Skip on draft PRs unless ready for review
+    if: github.event.pull_request.draft != true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check secret availability
+        id: check_secrets
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # For PRs, check if we have access to secrets
+            if [[ -z "${{ secrets.DISPATCH_TOKEN }}" ]]; then
+              echo "⚠️ DISPATCH_TOKEN not available for this PR (this is normal for security)"
+              echo "secret_available=false" >> $GITHUB_OUTPUT
+              echo "skip_reason=Secrets not available for PR" >> $GITHUB_OUTPUT
+            else
+              echo "✅ DISPATCH_TOKEN is available"
+              echo "secret_available=true" >> $GITHUB_OUTPUT
+            fi
+          else
+            # For pushes to branches, secrets should be available
+            if [[ -z "${{ secrets.DISPATCH_TOKEN }}" ]]; then
+              echo "❌ DISPATCH_TOKEN not configured for this repository"
+              echo "secret_available=false" >> $GITHUB_OUTPUT
+              echo "skip_reason=DISPATCH_TOKEN secret not configured" >> $GITHUB_OUTPUT
+            else
+              echo "✅ DISPATCH_TOKEN is available"
+              echo "secret_available=true" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Detect changed services
+        id: changes
+        run: |
+          CHANGED_SERVICES=""
+          
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # Get changed files in PR
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})
+          else
+            # Get changed files in push
+            if [[ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
+              CHANGED_FILES=$(git diff --name-only ${{ github.event.before }}..${{ github.event.after }})
+            else
+              # First push to branch, check last 10 commits
+              CHANGED_FILES=$(git diff --name-only HEAD~10..HEAD 2>/dev/null || git ls-files)
+            fi
+          fi
+          
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          
+          # Detect which services were changed
+          for service in auth-service user-service voyage-service payment-service ai-service; do
+            if echo "$CHANGED_FILES" | grep -q "^$service/"; then
+              if [[ -z "$CHANGED_SERVICES" ]]; then
+                CHANGED_SERVICES="$service"
+              else
+                CHANGED_SERVICES="$CHANGED_SERVICES,$service"
+              fi
+            fi
+          done
+          
+          # If no specific service changed, but there are changes, trigger all
+          if [[ -z "$CHANGED_SERVICES" ]] && [[ -n "$CHANGED_FILES" ]]; then
+            CHANGED_SERVICES="all"
+          fi
+          
+          echo "changed_services=${CHANGED_SERVICES}" >> $GITHUB_OUTPUT
+          echo "Detected changed services: $CHANGED_SERVICES"
+
+      - name: Determine environment
+        id: environment
+        run: |
+          ENVIRONMENT="dev"
+          
+          case "${{ github.ref }}" in
+            "refs/heads/main")
+              ENVIRONMENT="production"
+              ;;
+            "refs/heads/develop")
+              ENVIRONMENT="staging"
+              ;;
+            "refs/heads/release/"*)
+              ENVIRONMENT="staging"
+              ;;
+            *)
+              ENVIRONMENT="dev"
+              ;;
+          esac
+          
+          # For PRs, always use dev environment
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            ENVIRONMENT="dev"
+          fi
+          
+          echo "environment=${ENVIRONMENT}" >> $GITHUB_OUTPUT
+          echo "Target environment: $ENVIRONMENT"
+
+      - name: Skip dispatch notification
+        if: steps.changes.outputs.changed_services != '' && steps.check_secrets.outputs.secret_available == 'false'
+        run: |
+          echo "ℹ️ Central CI/CD pipeline dispatch skipped"
+          echo "Reason: ${{ steps.check_secrets.outputs.skip_reason }}"
+          echo "This is expected behavior for PRs from forks or when secrets are not configured"
+          echo "The pipeline will run normally after merge to main/develop"
+
+      - name: Trigger central CI/CD pipeline
+        if: steps.changes.outputs.changed_services != '' && steps.check_secrets.outputs.secret_available == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.DISPATCH_TOKEN }}
+          script: |
+            const eventType = 'services-changed';
+            const payload = {
+              source_repo: context.repo.owner + '/' + context.repo.repo,
+              ref: context.ref,
+              sha: context.sha,
+              component: '${{ steps.changes.outputs.changed_services }}',
+              environment: '${{ steps.environment.outputs.environment }}',
+              trigger_type: '${{ github.event_name }}',
+              actor: context.actor,
+              workflow_run_id: context.runId
+            };
+            
+            console.log('Triggering central pipeline with payload:', payload);
+            
+            try {
+              const response = await github.rest.repos.createDispatchEvent({
+                owner: 'DREAMSCAPE-AI',
+                repo: 'dreamscape-infra',
+                event_type: eventType,
+                client_payload: payload
+              });
+              
+              console.log('✅ Central pipeline triggered successfully');
+              
+              // Update commit status
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: context.sha,
+                state: 'pending',
+                target_url: `https://github.com/DREAMSCAPE-AI/dreamscape-infra/actions`,
+                description: 'Central CI/CD pipeline triggered',
+                context: 'ci/central-pipeline'
+              });
+              
+            } catch (error) {
+              console.error('❌ Failed to trigger central pipeline:', error);
+              
+              // Update commit status with failure
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: context.sha,
+                state: 'error',
+                description: 'Failed to trigger central CI/CD pipeline',
+                context: 'ci/central-pipeline'
+              });
+              
+              throw error;
+            }
+
+  local-validation:
+    name: Local Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Basic validation
+        run: |
+          echo "🔍 Running basic validation for services..."
+          
+          # Check if any service directories exist and validate basic structure
+          for service in auth-service user-service voyage-service payment-service ai-service; do
+            if [ -d "$service" ]; then
+              echo "Validating $service..."
+              
+              if [ -f "$service/package.json" ]; then
+                echo "✅ package.json found for $service"
+                
+                # Quick lint check if lint script exists
+                cd "$service"
+                if npm run lint --if-present &>/dev/null; then
+                  echo "✅ Lint passed for $service"
+                else
+                  echo "⚠️ Lint issues in $service (non-blocking)"
+                fi
+                cd ..
+              else
+                echo "⚠️ No package.json found for $service"
+              fi
+            fi
+          done
+          
+          echo "✅ Local validation completed"
+
+  summary:
+    name: Trigger Summary
+    runs-on: ubuntu-latest
+    needs: [trigger-central-pipeline, local-validation]
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "📊 SERVICES TRIGGER SUMMARY"
+          echo "=========================="
+          echo "Repository: ${{ github.repository }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "SHA: ${{ github.sha }}"
+          echo ""
+          echo "Results:"
+          echo "- Central Pipeline Trigger: ${{ needs.trigger-central-pipeline.result }}"
+          echo "- Local Validation: ${{ needs.local-validation.result }}"
+          
+          if [[ "${{ needs.trigger-central-pipeline.result }}" == "success" ]]; then
+            echo "✅ Central CI/CD pipeline successfully triggered"
+            echo "🔗 Check progress: https://github.com/DREAMSCAPE-AI/dreamscape-infra/actions"
+          elif [[ "${{ needs.trigger-central-pipeline.result }}" == "skipped" ]]; then
+            echo "ℹ️ Central pipeline dispatch skipped (normal for PRs)"
+          else
+            echo "❌ Failed to trigger central CI/CD pipeline"
+          fi
