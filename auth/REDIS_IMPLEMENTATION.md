@@ -4,6 +4,8 @@
 
 This document describes the Redis implementation in the DreamScape Auth Service, including caching, session management, and rate limiting.
 
+**Last updated**: 2025-10-30
+
 ## 🏗️ Architecture
 
 ### Components
