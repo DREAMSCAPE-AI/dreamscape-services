@@ -54,7 +54,7 @@ jobs:
           echo "$changed_files"
 
           services=()
-          for service in auth user ai payment voyage test-service; do
+          for service in auth user ai payment voyage; do
             if echo "$changed_files" | grep -q "^${service}/"; then
               services+=("\"$service\"")
               echo "✅ Service $service has changes"
@@ -93,6 +93,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+
+      - name: Install shared db dependencies
+        run: |
+          if [ -f "db/package.json" ]; then
+            echo "📦 Installing shared db package dependencies..."
+            cd db
+            if [ -f "package-lock.json" ]; then
+              npm ci
+            else
+              npm install
+            fi
+            cd ..
+          fi
 
       - name: Install dependencies for ${{ matrix.service }}
         run: |
@@ -137,16 +150,16 @@ jobs:
     steps:
       - name: Validate secrets
         run: |
-          if [ -z "${{ secrets.DISPATCH_TOKEN }}" ]; then
-            echo "❌ DISPATCH_TOKEN secret is not configured"
+          if [ -z "${{ secrets.CI_CLONE_TOKEN }}" ]; then
+            echo "❌ CI_CLONE_TOKEN secret is not configured"
             exit 1
           fi
-          echo "✅ DISPATCH_TOKEN is configured"
+          echo "✅ CI_CLONE_TOKEN is configured"
 
       - name: Trigger tests in dreamscape-tests
         uses: peter-evans/repository-dispatch@v2
         with:
-          token: ${{ secrets.DISPATCH_TOKEN }}
+          token: ${{ secrets.CI_CLONE_TOKEN }}
           repository: ${{ env.ORG }}/dreamscape-tests
           event-type: test-request
           client-payload: |
