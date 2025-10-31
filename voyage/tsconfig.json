@@ -16,9 +16,15 @@
     "paths": {
       "@/*": ["./*"],
       "@/config/*": ["./config/*"],
+      "@/config": ["./config"],
       "@/services/*": ["./services/*"],
+      "@/services": ["./services"],
       "@/routes/*": ["./routes/*"],
+      "@/routes": ["./routes"],
       "@/middleware/*": ["./middleware/*"],
+      "@/middleware": ["./middleware"],
+      "@/database/*": ["./database/*"],
+      "@/database": ["./database"],
       "@/dto/*": ["./dto/*"],
       "@/mappers/*": ["./mappers/*"]
     },
