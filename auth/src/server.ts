@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import { DatabaseService } from './database/DatabaseService';
 import router from './routes/auth';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import redisClient from './config/redis';
 
 dotenv.config();
 
@@ -32,12 +33,41 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use('/api/v1/auth', router);
 
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'auth-service',
-    timestamp: new Date().toISOString()
-  });
+app.get('/health', async (req, res) => {
+  const dbService = DatabaseService.getInstance();
+  const startTime = process.uptime();
+
+  try {
+    // Check database connectivity
+    const dbHealthy = await dbService.healthCheck();
+    const redisHealthy = redisClient.isReady();
+
+    res.json({
+      status: 'ok',
+      service: 'auth-service',
+      version: process.env.npm_package_version || '1.0.0',
+      timestamp: new Date().toISOString(),
+      uptime: Math.floor(startTime),
+      environment: process.env.NODE_ENV || 'development',
+      database: {
+        postgresql: dbHealthy.postgresql || false
+      },
+      cache: {
+        redis: redisHealthy
+      },
+      memory: {
+        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024)
+      }
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'degraded',
+      service: 'auth-service',
+      timestamp: new Date().toISOString(),
+      error: 'Database health check failed'
+    });
+  }
 });
 
 app.use(errorHandler);
@@ -51,23 +81,40 @@ app.use('*', (req, res) => {
 
 const startServer = async () => {
   try {
+    // Initialize database
     const dbService = DatabaseService.getInstance();
     const initResult = await dbService.initialize();
-    
+
     if (initResult.success) {
       console.log('✅ Database initialized successfully');
       console.log(`📊 PostgreSQL: ${initResult.postgresql ? '✅' : '❌'}`);
-      console.log(`📊 MongoDB: ${initResult.mongodb ? '✅' : '⚠️ (non-critical)'}`);
     } else {
       console.error('❌ Database initialization failed:', initResult.errors);
       throw new Error(`Database initialization failed: ${initResult.errors.join(', ')}`);
     }
-    
+
+    // Initialize Redis
+    try {
+      await redisClient.connect();
+      console.log('✅ Redis initialized successfully');
+    } catch (error) {
+      console.warn('⚠️ Redis initialization failed (non-critical):', error);
+      console.warn('⚠️ Service will continue without Redis caching and session management');
+    }
+
     const gracefulShutdown = async (signal: string) => {
       console.log(`\n🔄 Received ${signal}, starting graceful shutdown...`);
-      
+
       try {
+        // Disconnect database
         await dbService.disconnect();
+
+        // Disconnect Redis
+        if (redisClient.isReady()) {
+          await redisClient.disconnect();
+          console.log('✅ Redis disconnected');
+        }
+
         process.exit(0);
       } catch (error) {
         console.error('❌ Error during graceful shutdown:', error);
@@ -77,10 +124,11 @@ const startServer = async () => {
 
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-    
+
     app.listen(PORT, () => {
       console.log(`🚀 Auth service running on port ${PORT}`);
       console.log(`🌐 Client URL: ${process.env.CLIENT_URL || 'http://localhost:5173'}`);
+      console.log(`💾 Redis: ${redisClient.isReady() ? '✅ Connected' : '⚠️ Not available'}`);
     });
   } catch (error) {
     console.error('💥 Failed to start server:', error);

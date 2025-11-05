@@ -1,9 +1,10 @@
 import { Router, Request, Response } from 'express';
 import AmadeusService from '@/services/AmadeusService';
+import { FlightOfferMapper } from '@/mappers/FlightOfferMapper';
 
 const router = Router();
 
-// Search flights
+// Search flights with mapped DTOs (DR-132)
 router.get('/search', async (req: Request, res: Response): Promise<void> => {
   try {
     const {
@@ -48,7 +49,15 @@ router.get('/search', async (req: Request, res: Response): Promise<void> => {
     };
 
     const result = await AmadeusService.searchFlights(searchParams);
-    res.json(result);
+
+    // Map to internal DTOs then simplify for frontend
+    const offers = FlightOfferMapper.mapToDTOs(result.data);
+    const simplified = FlightOfferMapper.mapToSimplifiedList(offers);
+
+    res.json({
+      data: simplified,
+      meta: result.meta
+    });
   } catch (error) {
     console.error('Flight search error:', error);
     res.status(500).json({
