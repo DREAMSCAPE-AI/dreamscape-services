@@ -79,6 +79,38 @@ const validateBudgetRange = (budget: any): OnboardingValidationError[] => {
   return errors;
 };
 
+// Valid enum values from Prisma schema
+const VALID_TRAVEL_TYPES = [
+  'ADVENTURE', 'CULTURAL', 'RELAXATION', 'BUSINESS', 'FAMILY',
+  'ROMANTIC', 'WELLNESS', 'EDUCATIONAL', 'CULINARY', 'SHOPPING',
+  'NIGHTLIFE', 'NATURE', 'URBAN', 'BEACH', 'MOUNTAIN', 'HISTORICAL'
+] as const;
+
+const VALID_TRAVEL_STYLES = [
+  'PLANNED', 'SPONTANEOUS', 'BALANCED', 'LUXURY', 'BUDGET',
+  'MID_RANGE', 'BACKPACKER', 'FLASHPACKER'
+] as const;
+
+const VALID_COMFORT_LEVELS = [
+  'BASIC', 'STANDARD', 'PREMIUM', 'LUXURY'
+] as const;
+
+const VALID_BUDGET_FLEXIBILITY = [
+  'FIXED', 'SOMEWHAT_FLEXIBLE', 'VERY_FLEXIBLE'
+] as const;
+
+const VALID_DATE_FLEXIBILITY = [
+  'FIXED', 'SOMEWHAT_FLEXIBLE', 'VERY_FLEXIBLE'
+] as const;
+
+const VALID_ACTIVITY_LEVELS = [
+  'LOW', 'MODERATE', 'HIGH', 'VERY_HIGH'
+] as const;
+
+const VALID_RISK_TOLERANCE = [
+  'LOW', 'MODERATE', 'HIGH'
+] as const;
+
 const validateStepData = (step: OnboardingStepKey, data: any): OnboardingValidationError[] => {
   const errors: OnboardingValidationError[] = [];
 
@@ -90,12 +122,69 @@ const validateStepData = (step: OnboardingStepKey, data: any): OnboardingValidat
       break;
 
     case 'destinations':
-      if (data.preferredDestinations && !Array.isArray(data.preferredDestinations.regions)) {
+      if (data.preferredDestinations) {
+        const pd = data.preferredDestinations;
+
+        // Validate regions if provided
+        if (pd.regions !== undefined && !Array.isArray(pd.regions)) {
+          errors.push({
+            step,
+            field: 'preferredDestinations.regions',
+            error: 'Regions must be an array',
+            value: pd.regions
+          });
+        }
+
+        // Validate countries if provided
+        if (pd.countries !== undefined && !Array.isArray(pd.countries)) {
+          errors.push({
+            step,
+            field: 'preferredDestinations.countries',
+            error: 'Countries must be an array',
+            value: pd.countries
+          });
+        }
+
+        // Validate climates if provided
+        if (pd.climates !== undefined && !Array.isArray(pd.climates)) {
+          errors.push({
+            step,
+            field: 'preferredDestinations.climates',
+            error: 'Climates must be an array',
+            value: pd.climates
+          });
+        }
+      }
+      break;
+
+    case 'travel_types':
+      if (data.travelTypes) {
+        if (!Array.isArray(data.travelTypes)) {
+          errors.push({
+            step,
+            field: 'travelTypes',
+            error: 'Travel types must be an array',
+            value: data.travelTypes
+          });
+        } else {
+          const invalidTypes = data.travelTypes.filter((type: string) => !VALID_TRAVEL_TYPES.includes(type as any));
+          if (invalidTypes.length > 0) {
+            errors.push({
+              step,
+              field: 'travelTypes',
+              error: `Invalid travel types: ${invalidTypes.join(', ')}. Valid values are: ${VALID_TRAVEL_TYPES.join(', ')}`,
+              value: invalidTypes
+            });
+          }
+        }
+      }
+
+      if (data.travelStyle && !VALID_TRAVEL_STYLES.includes(data.travelStyle as any)) {
         errors.push({
           step,
-          field: 'preferredDestinations.regions',
-          error: 'Regions must be an array',
-          value: data.preferredDestinations.regions
+          field: 'travelStyle',
+          error: `Invalid travel style. Valid values are: ${VALID_TRAVEL_STYLES.join(', ')}`,
+          value: data.travelStyle
         });
       }
       break;
@@ -107,6 +196,61 @@ const validateStepData = (step: OnboardingStepKey, data: any): OnboardingValidat
           field: 'childrenAges',
           error: 'Children ages must be provided when traveling with children',
           value: data.childrenAges
+        });
+      }
+      break;
+
+    case 'comfort_service':
+      if (data.comfortLevel && !VALID_COMFORT_LEVELS.includes(data.comfortLevel as any)) {
+        errors.push({
+          step,
+          field: 'comfortLevel',
+          error: `Invalid comfort level. Valid values are: ${VALID_COMFORT_LEVELS.join(', ')}`,
+          value: data.comfortLevel
+        });
+      }
+      break;
+
+    case 'budget':
+      if (data.budgetFlexibility && !VALID_BUDGET_FLEXIBILITY.includes(data.budgetFlexibility as any)) {
+        errors.push({
+          step,
+          field: 'budgetFlexibility',
+          error: `Invalid budget flexibility. Valid values are: ${VALID_BUDGET_FLEXIBILITY.join(', ')}`,
+          value: data.budgetFlexibility
+        });
+      }
+      break;
+
+    case 'timing':
+      if (data.dateFlexibility && !VALID_DATE_FLEXIBILITY.includes(data.dateFlexibility as any)) {
+        errors.push({
+          step,
+          field: 'dateFlexibility',
+          error: `Invalid date flexibility. Valid values are: ${VALID_DATE_FLEXIBILITY.join(', ')}`,
+          value: data.dateFlexibility
+        });
+      }
+      break;
+
+    case 'activities':
+      if (data.activityLevel && !VALID_ACTIVITY_LEVELS.includes(data.activityLevel as any)) {
+        errors.push({
+          step,
+          field: 'activityLevel',
+          error: `Invalid activity level. Valid values are: ${VALID_ACTIVITY_LEVELS.join(', ')}`,
+          value: data.activityLevel
+        });
+      }
+      break;
+
+    case 'experience':
+      if (data.riskTolerance && !VALID_RISK_TOLERANCE.includes(data.riskTolerance as any)) {
+        errors.push({
+          step,
+          field: 'riskTolerance',
+          error: `Invalid risk tolerance. Valid values are: ${VALID_RISK_TOLERANCE.join(', ')}`,
+          value: data.riskTolerance
         });
       }
       break;
