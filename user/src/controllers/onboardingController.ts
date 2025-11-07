@@ -500,7 +500,7 @@ export const completeOnboarding = async (req: AuthRequest, res: Response): Promi
     // Mark as completed
     const now = new Date();
 
-    await Promise.all([
+    const [updatedProfile, updatedUser] = await Promise.all([
       prisma.travelOnboardingProfile.update({
         where: { userId },
         data: {
@@ -513,6 +513,11 @@ export const completeOnboarding = async (req: AuthRequest, res: Response): Promi
         data: {
           onboardingCompleted: true,
           onboardingCompletedAt: now
+        },
+        select: {
+          id: true,
+          onboardingCompleted: true,
+          onboardingCompletedAt: true
         }
       })
     ]);
@@ -531,7 +536,14 @@ export const completeOnboarding = async (req: AuthRequest, res: Response): Promi
       }
     });
 
-    sendSuccess(res, { completedAt: now }, 'Onboarding completed successfully');
+    sendSuccess(res, {
+      completedAt: now,
+      user: updatedUser,
+      profile: {
+        isCompleted: updatedProfile.isCompleted,
+        completedAt: updatedProfile.completedAt
+      }
+    }, 'Onboarding completed successfully');
   } catch (error) {
     console.error('Error completing onboarding:', error);
     sendError(res, 500, 'Failed to complete onboarding');
