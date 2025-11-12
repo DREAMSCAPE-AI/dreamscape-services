@@ -48,6 +48,8 @@ export class AuthService {
           lastName: true,
           isVerified: true,
           role: true,
+          onboardingCompleted: true,
+          onboardingCompletedAt: true,
           createdAt: true,
           updatedAt: true
         }
@@ -94,6 +96,8 @@ export class AuthService {
           lastName: true,
           isVerified: true,
           role: true,
+          onboardingCompleted: true,
+          onboardingCompletedAt: true,
           createdAt: true,
           updatedAt: true,
         }
@@ -296,6 +300,8 @@ export class AuthService {
           lastName: true,
           isVerified: true,
           role: true,
+          onboardingCompleted: true,
+          onboardingCompletedAt: true,
           createdAt: true,
           updatedAt: true,
 

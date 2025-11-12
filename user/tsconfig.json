@@ -4,7 +4,6 @@
     "module": "commonjs",
     "lib": ["ES2022"],
     "outDir": "./dist",
-    "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -18,14 +17,19 @@
     "declaration": false,
     "baseUrl": ".",
     "paths": {
-      "@types": ["src/types/index.ts"],
+      "@types/*": ["src/types/*"],
+      "@types_onboarding": ["src/types/onboarding.ts"],
+      "@controllers/*": ["src/controllers/*"],
+      "@routes/*": ["src/routes/*"],
       "@services/*": ["src/services/*"],
       "@middleware/*": ["src/middleware/*"],
       "@dreamscape/db": ["../db/index.ts"]
     }
   },
   "include": [
-    "src/**/*"
+    "src/**/*",
+    "../db/index.ts",
+    "../db/client.ts"
   ],
   "exclude": [
     "node_modules",
