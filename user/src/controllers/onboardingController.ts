@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { prisma } from '@dreamscape/db';
-import { AuthRequest } from '../middleware/auth';
+import { AuthRequest } from '@middleware/auth';
 import type {
   TravelOnboardingProfile,
   CreateOnboardingProfileRequest,
@@ -15,7 +15,7 @@ import type {
   WeatherTolerances,
   LoyaltyProgram,
   OnboardingStepKey
-} from '../types/onboarding.types';
+} from '@types_onboarding';
 
 // Helper function to send error responses
 const sendError = (res: Response, status: number, message: string, errors?: OnboardingValidationError[]): void => {
@@ -287,14 +287,14 @@ export const getOnboardingProfile = async (req: AuthRequest, res: Response): Pro
     // Transform Json fields back to typed objects
     const transformedProfile: TravelOnboardingProfile = {
       ...profile,
-      preferredDestinations: profile.preferredDestinations as PreferredDestinations | undefined,
-      globalBudgetRange: profile.globalBudgetRange as BudgetRange | undefined,
-      budgetByCategory: profile.budgetByCategory as Record<string, BudgetRange> | undefined,
-      preferredTripDuration: profile.preferredTripDuration as TripDuration | undefined,
-      roomPreferences: profile.roomPreferences as RoomPreferences | undefined,
-      groupSize: profile.groupSize as GroupSize | undefined,
-      weatherTolerances: profile.weatherTolerances as WeatherTolerances | undefined,
-      loyaltyPrograms: profile.loyaltyPrograms as LoyaltyProgram[] | undefined
+      preferredDestinations: (profile.preferredDestinations ?? undefined) as unknown as PreferredDestinations | undefined,
+      globalBudgetRange: (profile.globalBudgetRange ?? undefined) as unknown as BudgetRange | undefined,
+      budgetByCategory: (profile.budgetByCategory ?? undefined) as unknown as Record<string, BudgetRange> | undefined,
+      preferredTripDuration: (profile.preferredTripDuration ?? undefined) as unknown as TripDuration | undefined,
+      roomPreferences: (profile.roomPreferences ?? undefined) as unknown as RoomPreferences | undefined,
+      groupSize: (profile.groupSize ?? undefined) as unknown as GroupSize | undefined,
+      weatherTolerances: (profile.weatherTolerances ?? undefined) as unknown as WeatherTolerances | undefined,
+      loyaltyPrograms: (profile.loyaltyPrograms ?? undefined) as unknown as LoyaltyProgram[] | undefined
     };
 
     sendSuccess(res, transformedProfile);
@@ -461,7 +461,7 @@ export const getOnboardingProgress = async (req: AuthRequest, res: Response): Pr
       totalSteps: totalPossibleSteps.length,
       progressPercentage: Math.round((completedSteps.length / totalPossibleSteps.length) * 100),
       isCompleted: profile.user.onboardingCompleted || false,
-      completedAt: profile.user.onboardingCompletedAt,
+      completedAt: profile.user.onboardingCompletedAt ?? undefined,
       nextRecommendedStep: totalPossibleSteps.find(step => !completedSteps.includes(step))
     };
 

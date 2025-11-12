@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { prisma } from '@dreamscape/db';
+import type { TravelOnboardingProfile as PrismaTravelOnboardingProfile } from '@dreamscape/db';
 import type {
   TravelOnboardingProfile,
   BudgetRange,
@@ -9,7 +10,24 @@ import type {
   RoomPreferences,
   WeatherTolerances,
   LoyaltyProgram
-} from '../types/onboarding.types';
+} from '@types_onboarding';
+
+// Helper function to convert Prisma TravelOnboardingProfile to app TravelOnboardingProfile
+const convertPrismaProfile = (prismaProfile: PrismaTravelOnboardingProfile | null): TravelOnboardingProfile | null => {
+  if (!prismaProfile) return null;
+
+  return {
+    ...prismaProfile,
+    preferredDestinations: (prismaProfile.preferredDestinations ?? undefined) as unknown as PreferredDestinations | undefined,
+    globalBudgetRange: (prismaProfile.globalBudgetRange ?? undefined) as unknown as BudgetRange | undefined,
+    budgetByCategory: (prismaProfile.budgetByCategory ?? undefined) as unknown as Record<string, BudgetRange> | undefined,
+    preferredTripDuration: (prismaProfile.preferredTripDuration ?? undefined) as unknown as TripDuration | undefined,
+    roomPreferences: (prismaProfile.roomPreferences ?? undefined) as unknown as RoomPreferences | undefined,
+    groupSize: (prismaProfile.groupSize ?? undefined) as unknown as GroupSize | undefined,
+    weatherTolerances: (prismaProfile.weatherTolerances ?? undefined) as unknown as WeatherTolerances | undefined,
+    loyaltyPrograms: (prismaProfile.loyaltyPrograms ?? undefined) as unknown as LoyaltyProgram[] | undefined
+  };
+};
 
 // Standardized format for AI service consumption
 export interface AIUserPreferences {
@@ -206,13 +224,13 @@ const transformToAIFormat = (
           currency: profile.globalBudgetRange.currency
         } : undefined,
         byCategory: profile?.budgetByCategory || undefined,
-        flexibility: profile?.budgetFlexibility || null
+        flexibility: profile?.budgetFlexibility?.toLowerCase() as 'strict' | 'flexible' | 'very_flexible' || null
       },
 
       travel: {
         types: profile?.travelTypes || [],
         purposes: profile?.travelPurposes || [],
-        style: profile?.travelStyle || null,
+        style: profile?.travelStyle?.toLowerCase() as 'planned' | 'spontaneous' | 'mixed' || null,
         groupTypes: profile?.travelGroupTypes || [],
         travelWithChildren: profile?.travelWithChildren || false,
         childrenAges: profile?.childrenAges || []
@@ -220,13 +238,13 @@ const transformToAIFormat = (
 
       timing: {
         preferredSeasons: profile?.preferredSeasons || [],
-        dateFlexibility: profile?.dateFlexibility || null,
+        dateFlexibility: profile?.dateFlexibility?.toLowerCase() as 'flexible' | 'semi_flexible' | 'fixed' || null,
         typicalDuration: profile?.preferredTripDuration || undefined
       },
 
       accommodation: {
         types: profile?.accommodationTypes || [],
-        comfortLevel: profile?.accommodationLevel || null,
+        comfortLevel: profile?.accommodationLevel?.toLowerCase() as 'basic' | 'standard' | 'premium' | 'luxury' || null,
         serviceLevel: profile?.serviceLevel || undefined,
         privacyPreference: profile?.privacyPreference || undefined
       },
@@ -241,7 +259,7 @@ const transformToAIFormat = (
       activities: {
         types: profile?.activityTypes || [],
         interests: profile?.interestCategories || [],
-        activityLevel: profile?.activityLevel || null
+        activityLevel: profile?.activityLevel?.toLowerCase() as 'low' | 'moderate' | 'high' | 'very_high' || null
       },
 
       constraints: {
@@ -254,7 +272,7 @@ const transformToAIFormat = (
 
       experience: {
         level: profile?.experienceLevel || undefined,
-        riskTolerance: profile?.riskTolerance || null,
+        riskTolerance: profile?.riskTolerance?.toLowerCase() as 'conservative' | 'moderate' | 'adventurous' || null,
         culturalImmersion: profile?.culturalImmersion || undefined
       },
 
@@ -277,8 +295,8 @@ const transformToAIFormat = (
       completedSteps: profile?.completedSteps || [],
       profileVersion: profile?.version || 1,
       dataQuality: quality,
-      migrationInfo: profile?.migratedFromLegacy ? {
-        migratedFromLegacy: profile.migratedFromLegacy,
+      migrationInfo: (profile as any)?.migratedFromLegacy ? {
+        migratedFromLegacy: (profile as any).migratedFromLegacy,
         legacyDataSources: (profile as any).legacyDataSources || []
       } : undefined
     }
@@ -312,7 +330,7 @@ export const getUserPreferencesForAI = async (req: Request, res: Response): Prom
     }
 
     // Transform to AI format
-    const aiPreferences = transformToAIFormat(user, user.travelOnboarding);
+    const aiPreferences = transformToAIFormat(user, convertPrismaProfile(user.travelOnboarding));
 
     // Log AI data request for analytics
     await prisma.analytics.create({
@@ -365,7 +383,7 @@ export const getBatchUserPreferencesForAI = async (req: Request, res: Response):
 
     // Transform all users to AI format
     const batchPreferences = users.map(user =>
-      transformToAIFormat(user, user.travelOnboarding)
+      transformToAIFormat(user, convertPrismaProfile(user.travelOnboarding))
     );
 
     // Log batch AI request

@@ -2,15 +2,26 @@
 // Approche dynamique sans hardcoding des étapes
 
 import type {
+  TravelOnboardingProfile as PrismaTravelOnboardingProfile,
   TravelType,
   TravelStyle,
   ComfortLevel,
   BudgetFlexibility,
   DateFlexibility,
   ActivityLevel,
-  RiskTolerance,
-  TravelOnboardingProfile as PrismaTravelOnboardingProfile
-} from '@prisma/client';
+  RiskTolerance
+} from '@dreamscape/db';
+
+// Re-export des enums Prisma pour utilisation dans l'application
+export type {
+  TravelType,
+  TravelStyle,
+  ComfortLevel,
+  BudgetFlexibility,
+  DateFlexibility,
+  ActivityLevel,
+  RiskTolerance
+};
 
 // ========== BASE TYPES ==========
 
@@ -139,14 +150,3 @@ export function calculateProgress(completedSteps: string[], allPossibleSteps: st
 export function isStepCompleted(step: string, completedSteps: string[]): boolean {
   return completedSteps.includes(step);
 }
-
-// ========== EXPORT ENUMS ==========
-export type {
-  TravelType,
-  TravelStyle,
-  ComfortLevel,
-  BudgetFlexibility,
-  DateFlexibility,
-  ActivityLevel,
-  RiskTolerance
-};

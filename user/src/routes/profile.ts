@@ -233,12 +233,15 @@ router.put('/', authenticateToken, async (req: AuthRequest, res: Response): Prom
 
     // Update user profile if provided
     if (profile?.photo) {
+      // Get user data for firstName and lastName
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+
       await prisma.userProfile.upsert({
         where: { userId },
         create: {
           userId,
-          firstName: null,
-          lastName: null,
+          firstName: user?.firstName || '',
+          lastName: user?.lastName || '',
           avatar: profile.photo
         },
         update: {

@@ -6,11 +6,11 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { prisma } from '@dreamscape/db';
 // import activitiesRoutes from './routes/activities'; // TODO: Fix AmadeusService import
-import profileRoutes from './routes/profile';
-import onboardingRoutes from './routes/onboarding';
-import aiIntegrationRoutes from './routes/aiIntegration';
-import { apiLimiter } from './middleware/rateLimiter';
-import { errorHandler } from './middleware/errorHandler';
+import profileRoutes from '@routes/profile';
+import onboardingRoutes from '@routes/onboarding';
+import aiIntegrationRoutes from '@routes/aiIntegration';
+import { apiLimiter } from '@middleware/rateLimiter';
+import { errorHandler } from '@middleware/errorHandler';
 
 dotenv.config();
 

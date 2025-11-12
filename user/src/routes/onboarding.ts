@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken } from '@middleware/auth';
 import {
   getOnboardingProfile,
   createOnboardingProfile,
@@ -7,7 +7,7 @@ import {
   getOnboardingProgress,
   completeOnboarding,
   deleteOnboardingProfile
-} from '../controllers/onboardingController';
+} from '@controllers/onboardingController';
 
 const router = Router();
 

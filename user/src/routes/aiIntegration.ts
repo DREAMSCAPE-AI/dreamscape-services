@@ -3,7 +3,7 @@ import {
   getUserPreferencesForAI,
   getBatchUserPreferencesForAI,
   getAIIntegrationHealth
-} from '../controllers/aiIntegrationController';
+} from '@controllers/aiIntegrationController';
 
 const router = Router();
 

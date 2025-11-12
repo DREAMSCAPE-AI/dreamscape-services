@@ -52,7 +52,3 @@ Thumbs.db
 *.pem
 *.key
 .secrets/
-
-# CLAUDE
-CLAUDE.md
-user/docs
