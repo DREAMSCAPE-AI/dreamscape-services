@@ -10,6 +10,10 @@ export const config = {
     apiSecret: process.env.AMADEUS_API_SECRET!,
     baseUrl: process.env.AMADEUS_BASE_URL || 'https://test.api.amadeus.com'
   },
+  redis: {
+    url: process.env.REDIS_URL || 'redis://localhost:6379',
+    enabled: process.env.REDIS_ENABLED !== 'false' // Enable by default
+  },
   cors: {
     origin: process.env.CORS_ORIGIN || 'http://localhost:5173'
   }
