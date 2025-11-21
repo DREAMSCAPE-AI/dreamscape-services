@@ -1,0 +1,44 @@
+# Dockerfile production pour user-service
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copier le workspace db (dépendance locale)
+COPY db ./db
+
+# Copier les fichiers du service user
+COPY user/package.json user/tsconfig.json ./user/
+
+# Installer les dépendances
+WORKDIR /app/user
+RUN npm install --production=false
+
+# Copier le code source
+COPY user/src ./src
+
+# Builder le TypeScript
+RUN npm run build
+
+# === Stage de production ===
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Installer dumb-init pour un meilleur signal handling
+RUN apk add --no-cache dumb-init
+
+# Copier les fichiers de build
+COPY --from=builder /app/user/dist ./dist
+COPY --from=builder /app/user/node_modules ./node_modules
+COPY --from=builder /app/user/package.json ./package.json
+
+# Exposer le port
+EXPOSE 3002
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s \
+  CMD node -e "require('http').get('http://localhost:3002/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+
+# Lancer avec dumb-init
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "dist/server.js"]
