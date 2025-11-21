@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { config } from '@/config/environment';
+import cacheService from './CacheService';
 
 export interface AmadeusTokenResponse {
   access_token: string;
@@ -244,7 +245,7 @@ class AmadeusService {
     try {
       // Clean and validate the keyword
       const cleanKeyword = this.cleanLocationKeyword(params.keyword);
-      
+
       if (!cleanKeyword || cleanKeyword.length < 2) {
         throw new Error('Keyword must be at least 2 characters long');
       }
@@ -254,23 +255,30 @@ class AmadeusService {
         'page[limit]': 10,
         'page[offset]': 0
       };
-      
+
       // Only add subType if it's provided and valid
       if (params.subType && ['AIRPORT', 'CITY', 'HOTEL', 'DISTRICT'].includes(params.subType)) {
         searchParams.subType = params.subType;
       }
-      
+
       // Only add countryCode if it's provided and valid (2-letter ISO code)
       if (params.countryCode && /^[A-Z]{2}$/.test(params.countryCode)) {
         searchParams.countryCode = params.countryCode;
       }
 
       console.log('Location search params:', searchParams);
-      
-      const response = await this.api.get('/v1/reference-data/locations', { 
-        params: searchParams 
-      });
-      return response.data;
+
+      // Use cache wrapper
+      return await cacheService.cacheWrapper(
+        'locations',
+        searchParams,
+        async () => {
+          const response = await this.api.get('/v1/reference-data/locations', {
+            params: searchParams
+          });
+          return response.data;
+        }
+      );
     } catch (error) {
       console.error('Amadeus location search error:', error);
       throw this.handleError(error, `Location search for "${params.keyword}"`);
@@ -371,8 +379,15 @@ class AmadeusService {
 
   async searchFlights(params: FlightSearchParams) {
     try {
-      const response = await this.api.get('/v2/shopping/flight-offers', { params });
-      return response.data;
+      // Use cache wrapper for flight search
+      return await cacheService.cacheWrapper(
+        'flights',
+        params,
+        async () => {
+          const response = await this.api.get('/v2/shopping/flight-offers', { params });
+          return response.data;
+        }
+      );
     } catch (error) {
       throw this.handleError(error, 'Flight search failed');
     }
@@ -385,10 +400,17 @@ class AmadeusService {
    */
   async searchFlightsWithMapping(params: FlightSearchParams) {
     try {
-      const response = await this.api.get('/v2/shopping/flight-offers', { params });
-      // Note: FlightOfferMapper can be imported when needed
-      // For now, return raw data - mapper will be used in routes
-      return response.data;
+      // Use cache wrapper for flight search with mapping
+      return await cacheService.cacheWrapper(
+        'flightOffers',
+        params,
+        async () => {
+          const response = await this.api.get('/v2/shopping/flight-offers', { params });
+          // Note: FlightOfferMapper can be imported when needed
+          // For now, return raw data - mapper will be used in routes
+          return response.data;
+        }
+      );
     } catch (error) {
       throw this.handleError(error, 'Flight search failed');
     }
@@ -405,8 +427,15 @@ class AmadeusService {
 
   async getHotelDetails(offerId: string): Promise<any> {
     try {
-      const response = await this.api.get(`/v3/shopping/hotel-offers/${offerId}`);
-      return response.data;
+      // Use cache wrapper for hotel details
+      return await cacheService.cacheWrapper(
+        'hotelDetails',
+        { offerId },
+        async () => {
+          const response = await this.api.get(`/v3/shopping/hotel-offers/${offerId}`);
+          return response.data;
+        }
+      );
     } catch (error) {
       throw this.handleError(error, 'Failed to get hotel details');
     }
@@ -455,8 +484,15 @@ class AmadeusService {
     currencyCode?: string;
   }): Promise<any> {
     try {
-      const response = await this.api.get('/v1/analytics/itinerary-price-metrics', { params });
-      return response.data;
+      // Use cache wrapper for flight price analysis
+      return await cacheService.cacheWrapper(
+        'flightPrices',
+        params,
+        async () => {
+          const response = await this.api.get('/v1/analytics/itinerary-price-metrics', { params });
+          return response.data;
+        }
+      );
     } catch (error) {
       throw this.handleError(error, 'Flight price analysis failed');
     }
@@ -703,8 +739,15 @@ class AmadeusService {
     ICAOCode?: string;
   }): Promise<any> {
     try {
-      const response = await this.api.get('/v1/reference-data/airlines', { params });
-      return response.data;
+      // Use cache wrapper for airline lookup (long TTL - 7 days)
+      return await cacheService.cacheWrapper(
+        'airlines',
+        params,
+        async () => {
+          const response = await this.api.get('/v1/reference-data/airlines', { params });
+          return response.data;
+        }
+      );
     } catch (error) {
       throw this.handleError(error, 'Airline code lookup failed');
     }
@@ -982,10 +1025,17 @@ class AmadeusService {
         'page[limit]': 10
       };
 
-      const response = await this.api.get('/v1/reference-data/locations', { 
-        params: searchParams 
-      });
-      return response.data;
+      // Use cache wrapper for airport search (long TTL - 24 hours)
+      return await cacheService.cacheWrapper(
+        'airports',
+        searchParams,
+        async () => {
+          const response = await this.api.get('/v1/reference-data/locations', {
+            params: searchParams
+          });
+          return response.data;
+        }
+      );
     } catch (error) {
       throw this.handleError(error, 'Airport search failed');
     }
