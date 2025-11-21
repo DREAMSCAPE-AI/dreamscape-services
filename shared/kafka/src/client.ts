@@ -75,7 +75,7 @@ export class KafkaClient {
       clientId: config.clientId,
       brokers: config.brokers,
       ssl: config.ssl,
-      sasl: config.sasl,
+      sasl: config.sasl as any,
       connectionTimeout: config.connectionTimeout,
       requestTimeout: config.requestTimeout,
       retry: config.retry,
