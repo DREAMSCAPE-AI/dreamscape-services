@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@dreamscape/db": "file:../db",
+    "@dreamscape/kafka": "file:../shared/kafka",
     "axios": "^1.6.2",
     "bcryptjs": "^3.0.2",
     "compression": "^1.7.4",
