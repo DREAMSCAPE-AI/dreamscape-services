@@ -20,17 +20,10 @@ interface HealthResponse {
       connected: boolean;
       error?: string;
     };
-    mongodb: {
-      status: 'healthy' | 'unhealthy' | 'optional';
-      responseTime?: number;
-      connected: boolean;
-      error?: string;
-    };
   };
   overall: {
     ready: boolean;
     critical_services_up: boolean;
-    optional_services_up: boolean;
   };
 }
 
@@ -46,10 +39,6 @@ interface ErrorResponse {
       environment: string;
     };
     postgresql: {
-      status: 'unhealthy';
-      connected: boolean;
-    };
-    mongodb: {
       status: 'unhealthy';
       connected: boolean;
     };
@@ -89,10 +78,6 @@ router.get('/', async (req: Request, res: Response<HealthResponse | ErrorRespons
           postgresql: {
             status: 'unhealthy',
             connected: false
-          },
-          mongodb: {
-            status: 'unhealthy',
-            connected: false
           }
         }
       };
@@ -110,9 +95,6 @@ router.get('/', async (req: Request, res: Response<HealthResponse | ErrorRespons
     if (!dbHealth.postgresql) {
       overallStatus = 'unhealthy';
       statusCode = 503;
-    } else if (!dbHealth.mongodb) {
-      overallStatus = 'degraded'; // MongoDB est optionnel
-      statusCode = 206; // Partial Content
     }
 
     const response: HealthResponse = {
@@ -130,18 +112,11 @@ router.get('/', async (req: Request, res: Response<HealthResponse | ErrorRespons
           responseTime: dbHealth.details.postgresql.responseTime,
           connected: dbHealth.details.postgresql.connected,
           error: dbHealth.details.postgresql.error
-        },
-        mongodb: {
-          status: dbHealth.mongodb ? 'healthy' : 'unhealthy',
-          responseTime: dbHealth.details.mongodb.responseTime,
-          connected: dbHealth.details.mongodb.connected,
-          error: dbHealth.details.mongodb.error
         }
       },
       overall: {
         ready: dbHealth.overall,
-        critical_services_up: dbHealth.postgresql,
-        optional_services_up: dbHealth.mongodb
+        critical_services_up: dbHealth.postgresql
       }
     };
 
@@ -168,10 +143,6 @@ router.get('/', async (req: Request, res: Response<HealthResponse | ErrorRespons
           environment: process.env.NODE_ENV || 'development'
         },
         postgresql: {
-          status: 'unhealthy',
-          connected: false
-        },
-        mongodb: {
           status: 'unhealthy',
           connected: false
         }
