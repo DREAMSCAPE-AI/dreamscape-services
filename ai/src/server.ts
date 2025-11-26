@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { DatabaseService } from './database/DatabaseService';
 import recommendationsRoutes from './routes/recommendations';
 import predictionsRoutes from './routes/predictions';
+import healthRoutes from './routes/health';
 import { rateLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/errorHandler';
 
@@ -35,14 +36,8 @@ app.use(rateLimiter);
 app.use('/api/v1/recommendations', recommendationsRoutes);
 app.use('/api/v1/predictions', predictionsRoutes);
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'ai-service',
-    timestamp: new Date().toISOString()
-  });
-});
+// Health check - INFRA-013.1
+app.use('/health', healthRoutes);
 
 // Error handling
 app.use(errorHandler);

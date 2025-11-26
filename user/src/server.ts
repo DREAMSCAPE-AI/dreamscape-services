@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { prisma } from '@dreamscape/db';
 // import activitiesRoutes from './routes/activities'; // TODO: Fix AmadeusService import
 import profileRoutes from './routes/profile';
+import healthRoutes from './routes/health';
 import { apiLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/errorHandler';
 
@@ -38,14 +39,9 @@ app.use('/uploads', express.static('uploads'));
 // app.use('/api/v1/activities', activitiesRoutes); // TODO: Fix AmadeusService import
 app.use('/api/v1/users/profile', profileRoutes);
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'user-service',
-    timestamp: new Date().toISOString()
-  });
-});
+// Health check routes - INFRA-013.1
+app.use('/health', healthRoutes);
+app.use('/api/health', healthRoutes); // Alternative path for consistency
 
 // Error handling
 app.use(errorHandler);

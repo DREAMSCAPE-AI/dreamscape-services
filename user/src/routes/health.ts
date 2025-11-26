@@ -4,18 +4,17 @@ import {
   ComponentType,
   HealthStatus,
 } from '../../../shared/health';
-import DatabaseService from '../database/DatabaseService';
-import prisma from '../database/prisma';
+import { prisma } from '@dreamscape/db';
 
 const router = Router();
 
 /**
  * Health Check Configuration - INFRA-013.1
- * Voyage Service health checks
+ * User Service health checks
  */
 const createHealthChecker = () => {
   return new HealthChecker({
-    serviceName: 'voyage-service',
+    serviceName: 'user-service',
     serviceVersion: process.env.npm_package_version || '1.0.0',
     includeMetadata: true,
     checks: [
@@ -52,40 +51,42 @@ const createHealthChecker = () => {
           }
         },
       },
-      // MongoDB - OPTIONAL (if configured)
-      ...(process.env.MONGODB_URI
-        ? [
-            {
-              name: 'MongoDB',
-              type: ComponentType.DATABASE,
-              critical: false, // MongoDB is optional for voyage service
-              timeout: 3000,
-              check: async () => {
-                try {
-                  // MongoDB check if needed - placeholder for now
-                  return {
-                    status: HealthStatus.HEALTHY,
-                    message: 'MongoDB not configured or optional',
-                    details: {
-                      connected: false,
-                      optional: true,
-                    },
-                  };
-                } catch (error) {
-                  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                  return {
-                    status: HealthStatus.DEGRADED,
-                    message: `MongoDB check failed: ${errorMessage}`,
-                    details: {
-                      connected: false,
-                      error: errorMessage,
-                    },
-                  };
-                }
+      // Filesystem check for uploads directory
+      {
+        name: 'Uploads Directory',
+        type: ComponentType.FILESYSTEM,
+        critical: false,
+        timeout: 2000,
+        check: async () => {
+          try {
+            const fs = await import('fs/promises');
+            const startTime = Date.now();
+            await fs.access('uploads/avatars');
+            const responseTime = Date.now() - startTime;
+
+            return {
+              status: HealthStatus.HEALTHY,
+              message: 'Uploads directory accessible',
+              details: {
+                path: 'uploads/avatars',
+                accessible: true,
+                responseTime,
               },
-            },
-          ]
-        : []),
+            };
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            return {
+              status: HealthStatus.DEGRADED,
+              message: `Uploads directory not accessible: ${errorMessage}`,
+              details: {
+                path: 'uploads/avatars',
+                accessible: false,
+                error: errorMessage,
+              },
+            };
+          }
+        },
+      },
     ],
   });
 };
@@ -110,17 +111,17 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     const totalTime = Date.now() - startTime;
 
     console.log(
-      `🏥 [Voyage] Health check completed in ${totalTime}ms - Status: ${healthReport.status}`
+      `🏥 [User] Health check completed in ${totalTime}ms - Status: ${healthReport.status}`
     );
 
     res.status(statusCode).json(healthReport);
   } catch (error) {
     const totalTime = Date.now() - startTime;
-    console.error(`💥 [Voyage] Health check failed in ${totalTime}ms:`, error);
+    console.error(`💥 [User] Health check failed in ${totalTime}ms:`, error);
 
     res.status(500).json({
       status: 'error',
-      service: 'voyage-service',
+      service: 'user-service',
       timestamp: new Date().toISOString(),
       error: error instanceof Error ? error.message : 'Health check failed',
     });
@@ -138,7 +139,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 router.get('/live', (req: Request, res: Response): void => {
   res.status(200).json({
     alive: true,
-    service: 'voyage-service',
+    service: 'user-service',
     timestamp: new Date().toISOString(),
     uptime: Math.floor(process.uptime()),
   });
@@ -155,38 +156,27 @@ router.get('/live', (req: Request, res: Response): void => {
  */
 router.get('/ready', async (req: Request, res: Response): Promise<void> => {
   try {
-    const dbService = DatabaseService.getInstance();
+    // Vérifier que PostgreSQL est accessible
+    await prisma.$queryRaw`SELECT 1`;
 
-    // Vérifier que la DB est initialisée
-    const dbReady = dbService.isReady ? dbService.isReady() : { ready: false, postgresql: false };
-
-    if (dbReady.ready && dbReady.postgresql) {
-      res.status(200).json({
-        ready: true,
-        service: 'voyage-service',
-        timestamp: new Date().toISOString(),
-        dependencies: {
-          postgresql: dbReady.postgresql,
-        },
-      });
-    } else {
-      res.status(503).json({
-        ready: false,
-        service: 'voyage-service',
-        timestamp: new Date().toISOString(),
-        reason: 'PostgreSQL not ready',
-        dependencies: {
-          postgresql: dbReady.postgresql || false,
-        },
-      });
-    }
+    res.status(200).json({
+      ready: true,
+      service: 'user-service',
+      timestamp: new Date().toISOString(),
+      dependencies: {
+        postgresql: true,
+      },
+    });
   } catch (error) {
     res.status(503).json({
       ready: false,
-      service: 'voyage-service',
+      service: 'user-service',
       timestamp: new Date().toISOString(),
-      reason: 'Service initialization error',
+      reason: 'PostgreSQL not ready',
       error: error instanceof Error ? error.message : 'Unknown error',
+      dependencies: {
+        postgresql: false,
+      },
     });
   }
 });

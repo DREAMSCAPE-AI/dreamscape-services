@@ -2,20 +2,22 @@ import { Router, Request, Response } from 'express';
 import {
   HealthChecker,
   ComponentType,
-  HealthStatus,
+  createPostgreSQLCheck,
+  createRedisCheck,
 } from '../../../shared/health';
-import DatabaseService from '../database/DatabaseService';
+import { DatabaseService } from '../database/DatabaseService';
+import redisClient from '../config/redis';
 import prisma from '../database/prisma';
 
 const router = Router();
 
 /**
  * Health Check Configuration - INFRA-013.1
- * Voyage Service health checks
+ * Auth Service health checks
  */
 const createHealthChecker = () => {
   return new HealthChecker({
-    serviceName: 'voyage-service',
+    serviceName: 'auth-service',
     serviceVersion: process.env.npm_package_version || '1.0.0',
     includeMetadata: true,
     checks: [
@@ -32,7 +34,7 @@ const createHealthChecker = () => {
             const responseTime = Date.now() - startTime;
 
             return {
-              status: HealthStatus.HEALTHY,
+              status: 'healthy' as const,
               message: 'PostgreSQL connection successful',
               details: {
                 connected: true,
@@ -42,7 +44,7 @@ const createHealthChecker = () => {
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             return {
-              status: HealthStatus.UNHEALTHY,
+              status: 'unhealthy' as const,
               message: `PostgreSQL connection failed: ${errorMessage}`,
               details: {
                 connected: false,
@@ -52,40 +54,14 @@ const createHealthChecker = () => {
           }
         },
       },
-      // MongoDB - OPTIONAL (if configured)
-      ...(process.env.MONGODB_URI
-        ? [
-            {
-              name: 'MongoDB',
-              type: ComponentType.DATABASE,
-              critical: false, // MongoDB is optional for voyage service
-              timeout: 3000,
-              check: async () => {
-                try {
-                  // MongoDB check if needed - placeholder for now
-                  return {
-                    status: HealthStatus.HEALTHY,
-                    message: 'MongoDB not configured or optional',
-                    details: {
-                      connected: false,
-                      optional: true,
-                    },
-                  };
-                } catch (error) {
-                  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                  return {
-                    status: HealthStatus.DEGRADED,
-                    message: `MongoDB check failed: ${errorMessage}`,
-                    details: {
-                      connected: false,
-                      error: errorMessage,
-                    },
-                  };
-                }
-              },
-            },
-          ]
-        : []),
+      // Redis - NON-CRITICAL (dégradé si down)
+      {
+        name: 'Redis Cache',
+        type: ComponentType.CACHE,
+        critical: false,
+        timeout: 2000,
+        check: createRedisCheck(redisClient),
+      },
     ],
   });
 };
@@ -110,17 +86,17 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     const totalTime = Date.now() - startTime;
 
     console.log(
-      `🏥 [Voyage] Health check completed in ${totalTime}ms - Status: ${healthReport.status}`
+      `🏥 [Auth] Health check completed in ${totalTime}ms - Status: ${healthReport.status}`
     );
 
     res.status(statusCode).json(healthReport);
   } catch (error) {
     const totalTime = Date.now() - startTime;
-    console.error(`💥 [Voyage] Health check failed in ${totalTime}ms:`, error);
+    console.error(`💥 [Auth] Health check failed in ${totalTime}ms:`, error);
 
     res.status(500).json({
       status: 'error',
-      service: 'voyage-service',
+      service: 'auth-service',
       timestamp: new Date().toISOString(),
       error: error instanceof Error ? error.message : 'Health check failed',
     });
@@ -138,7 +114,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 router.get('/live', (req: Request, res: Response): void => {
   res.status(200).json({
     alive: true,
-    service: 'voyage-service',
+    service: 'auth-service',
     timestamp: new Date().toISOString(),
     uptime: Math.floor(process.uptime()),
   });
@@ -158,32 +134,37 @@ router.get('/ready', async (req: Request, res: Response): Promise<void> => {
     const dbService = DatabaseService.getInstance();
 
     // Vérifier que la DB est initialisée
-    const dbReady = dbService.isReady ? dbService.isReady() : { ready: false, postgresql: false };
+    const dbReady = dbService.isReady ? dbService.isReady() : false;
 
-    if (dbReady.ready && dbReady.postgresql) {
+    // Vérifier Redis (non-critique)
+    const redisReady = redisClient.isReady;
+
+    if (dbReady) {
       res.status(200).json({
         ready: true,
-        service: 'voyage-service',
+        service: 'auth-service',
         timestamp: new Date().toISOString(),
         dependencies: {
-          postgresql: dbReady.postgresql,
+          postgresql: dbReady,
+          redis: redisReady,
         },
       });
     } else {
       res.status(503).json({
         ready: false,
-        service: 'voyage-service',
+        service: 'auth-service',
         timestamp: new Date().toISOString(),
         reason: 'PostgreSQL not ready',
         dependencies: {
-          postgresql: dbReady.postgresql || false,
+          postgresql: dbReady,
+          redis: redisReady,
         },
       });
     }
   } catch (error) {
     res.status(503).json({
       ready: false,
-      service: 'voyage-service',
+      service: 'auth-service',
       timestamp: new Date().toISOString(),
       reason: 'Service initialization error',
       error: error instanceof Error ? error.message : 'Unknown error',
