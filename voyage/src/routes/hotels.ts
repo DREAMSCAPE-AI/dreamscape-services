@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { ParsedQs } from 'qs';
 import AmadeusService from '@/services/AmadeusService';
+import { HotelOfferMapper } from '@/mappers/HotelOfferMapper';
 
 const router = Router();
 
@@ -116,8 +117,12 @@ router.get('/search', async (req: Request, res: Response): Promise<void> => {
 
     try {
       const result = await AmadeusService.searchHotels(searchParams);
+
+      // Map to simplified DTOs for frontend
+      const simplifiedHotels = HotelOfferMapper.mapAmadeusToSimplified(result.data || []);
+
       res.json({
-        data: result.data || [],
+        data: simplifiedHotels,
         meta: {
           pagination: {
             page: pageNum,
@@ -174,8 +179,11 @@ router.get('/details/:hotelId', async (req: Request, res: Response): Promise<voi
       return;
     }
 
+    // Map to simplified DTO
+    const simplifiedHotel = HotelOfferMapper.mapAmadeusToSimplified([result.data[0]])[0];
+
     res.json({
-      data: result.data[0],
+      data: simplifiedHotel,
       meta: result.meta
     });
   } catch (error) {
