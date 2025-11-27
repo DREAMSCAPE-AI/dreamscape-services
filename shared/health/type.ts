@@ -20,7 +20,7 @@ export interface HealthCheckResult {
   type: ComponentType;
   responseTime?: number;
   message?: string;
-  details?: Record;
+  details?: Record<string, any>;
   timestamp: Date;
 }
 
@@ -51,7 +51,7 @@ export interface HealthCheck {
   type: ComponentType;
   critical: boolean;
   timeout?: number;
-  check: () => Promise;
+  check: () => Promise<HealthCheckResult>;
 }
 
 export interface HealthCheckerConfig {
