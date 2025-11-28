@@ -1,0 +1,43 @@
+# Payment Service - Stub Server Dockerfile
+# Lightweight Node.js stub for payment processing
+
+FROM node:20-alpine AS runtime
+
+# Set working directory
+WORKDIR /app/payment
+
+# Install dumb-init for proper signal handling
+RUN apk add --no-cache dumb-init
+
+# Copy package files
+COPY payment/package*.json ./
+
+# Install only production dependencies
+RUN npm install --only=production express cors
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S -D -H -u 1001 -h /app -s /sbin/nologin -G nodejs -g nodejs nodejs && \
+    chown -R nodejs:nodejs /app
+
+# Copy stub server
+COPY payment/src/stub-server.js ./src/
+
+# Set environment variables
+ENV NODE_ENV=production \
+    PORT=3005 \
+    PAYMENT_SERVICE_PORT=3005
+
+# Expose port
+EXPOSE 3005
+
+# Switch to non-root user
+USER nodejs
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:3005/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+
+# Start stub server
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "src/stub-server.js"]
