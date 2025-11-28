@@ -307,61 +307,66 @@ class AmadeusService {
   }
 
   async searchHotels(params: HotelSearchParams): Promise<any> {
-    try {
-      // Validate required parameters
-      if (!params.checkInDate || !params.checkOutDate) {
-        throw new Error('Check-in and check-out dates are required');
-      }
-  
-      // Validate date format (YYYY-MM-DD)
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-      if (!dateRegex.test(params.checkInDate) || !dateRegex.test(params.checkOutDate)) {
-        throw new Error('Dates must be in YYYY-MM-DD format');
-      }
-  
-      // Validate that check-in is before check-out
-      if (new Date(params.checkInDate) >= new Date(params.checkOutDate)) {
-        throw new Error('Check-in date must be before check-out date');
-      }
-  
-      // Set pagination defaults
-      const page = params.page || { offset: 0, limit: 10 };
-      const limit = Math.min(50, Math.max(1, page.limit || 10));
-      const offset = Math.max(0, page.offset || 0);
-  
-      const searchParams: any = {
-        checkInDate: params.checkInDate,
-        checkOutDate: params.checkOutDate,
-        adults: Math.max(1, Math.min(8, params.adults ?? 1)), // Clamp between 1-8
-        roomQuantity: Math.max(1, Math.min(8, params.roomQuantity ?? 1)), // Clamp between 1-8
-        view: 'FULL_ALL_IMAGES'
-      };
-  
-      if (params.page) {
-        searchParams.page = {
-          limit: params.page.limit,
-          offset: params.page.offset
-        };
-      }
-  
-      try {
-        const response = await this.api.get('/v3/shopping/hotel-offers', {
-          params: searchParams
-        });
-        return response.data;
-      } catch (error: any) {
-        // If we get a rate limit error or no city code, try the fallback
-        if (error.response?.status === 429 || !params.cityCode) {
-          throw this.handleError(error, `Hotel search for ${params.cityCode || 'coordinates'}`);
-        }
-  
+    // Wrap with cache for better performance
+    return await cacheService.cacheWrapper(
+      'hotels',
+      params,
+      async () => {
         try {
-          console.log('Trying hotel list endpoint as fallback...');
-          const fallbackResponse = await this.api.get('/v1/reference-data/locations/hotels/by-city', {
-            params: {
-              cityCode: params.cityCode,
-              radius: params.radius || 5,
-              radiusUnit: params.radiusUnit || 'KM',
+          // Validate required parameters
+          if (!params.checkInDate || !params.checkOutDate) {
+            throw new Error('Check-in and check-out dates are required');
+          }
+
+          // Validate date format (YYYY-MM-DD)
+          const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+          if (!dateRegex.test(params.checkInDate) || !dateRegex.test(params.checkOutDate)) {
+            throw new Error('Dates must be in YYYY-MM-DD format');
+          }
+
+          // Validate that check-in is before check-out
+          if (new Date(params.checkInDate) >= new Date(params.checkOutDate)) {
+            throw new Error('Check-in date must be before check-out date');
+          }
+
+          // Set pagination defaults
+          const page = params.page || { offset: 0, limit: 10 };
+          const limit = Math.min(50, Math.max(1, page.limit || 10));
+          const offset = Math.max(0, page.offset || 0);
+
+          const searchParams: any = {
+            checkInDate: params.checkInDate,
+            checkOutDate: params.checkOutDate,
+            adults: Math.max(1, Math.min(8, params.adults ?? 1)), // Clamp between 1-8
+            roomQuantity: Math.max(1, Math.min(8, params.roomQuantity ?? 1)), // Clamp between 1-8
+            view: 'FULL_ALL_IMAGES'
+          };
+
+          if (params.page) {
+            searchParams.page = {
+              limit: params.page.limit,
+              offset: params.page.offset
+            };
+          }
+
+          try {
+            const response = await this.api.get('/v3/shopping/hotel-offers', {
+              params: searchParams
+            });
+            return response.data;
+          } catch (error: any) {
+            // If we get a rate limit error or no city code, try the fallback
+            if (error.response?.status === 429 || !params.cityCode) {
+              throw this.handleError(error, `Hotel search for ${params.cityCode || 'coordinates'}`);
+            }
+
+            try {
+              console.log('Trying hotel list endpoint as fallback...');
+              const fallbackResponse = await this.api.get('/v1/reference-data/locations/hotels/by-city', {
+                params: {
+                  cityCode: params.cityCode,
+                  radius: params.radius || 5,
+                  radiusUnit: params.radiusUnit || 'KM',
               hotelSource: 'ALL'
             }
           });
@@ -375,6 +380,8 @@ class AmadeusService {
       // This catch block was missing - it handles any errors from the validation logic
       throw this.handleError(error, `Hotel search for ${params.cityCode || 'coordinates'}`);
     }
+      }
+    );
   }
 
   async searchFlights(params: FlightSearchParams) {
@@ -456,6 +463,69 @@ class AmadeusService {
       return response.data;
     } catch (error) {
       throw this.handleError(error, 'Failed to autocomplete hotel name');
+    }
+  }
+
+  /**
+   * Create a hotel booking
+   * @param offerId - The hotel offer ID from search results
+   * @param guests - Array of guest information
+   * @param payments - Payment information
+   */
+  async createHotelBooking(params: {
+    offerId: string;
+    guests: Array<{
+      id?: number;
+      name: {
+        title: string;
+        firstName: string;
+        lastName: string;
+      };
+      contact: {
+        phone: string;
+        email: string;
+      };
+    }>;
+    payments: Array<{
+      method: string;
+      card?: {
+        vendorCode: string;
+        cardNumber: string;
+        expiryDate: string;
+      };
+    }>;
+  }): Promise<any> {
+    try {
+      const bookingData = {
+        data: {
+          offerId: params.offerId,
+          guests: params.guests.map((guest, index) => ({
+            id: guest.id || index + 1,
+            name: {
+              title: guest.name.title,
+              firstName: guest.name.firstName,
+              lastName: guest.name.lastName
+            },
+            contact: {
+              phone: guest.contact.phone,
+              email: guest.contact.email
+            }
+          })),
+          payments: params.payments.map(payment => ({
+            method: payment.method,
+            card: payment.card ? {
+              vendorCode: payment.card.vendorCode,
+              cardNumber: payment.card.cardNumber,
+              expiryDate: payment.card.expiryDate
+            } : undefined
+          }))
+        }
+      };
+
+      const response = await this.api.post('/v1/booking/hotel-bookings', bookingData);
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Hotel booking creation failed');
     }
   }
 
