@@ -28,3 +28,7 @@ Test effectué le : $(date -u +"%Y-%m-%d %H:%M:%S UTC")
 ## Update: Token also updated in dreamscape-infra
 
 ## Retest avec Kustomize corrigé
+
+Test #3: Vérification complète après fix commonLabels → labels
+- Commit infra: aafad73 (fix applied to all 3 overlays)
+- Date: 2025-11-28T10:10:00Z
