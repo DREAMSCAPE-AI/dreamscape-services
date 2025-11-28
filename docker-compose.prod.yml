@@ -1,0 +1,184 @@
+# Docker Compose Production - Global Orchestration
+# Pods: Core + Business
+# Note: Experience Pod (gateway + web + panorama) is in dreamscape-frontend repo
+
+version: '3.8'
+
+services:
+  # ========================================
+  # CORE POD (auth + user + PostgreSQL)
+  # ========================================
+
+  core-db:
+    image: postgres:15-alpine
+    container_name: dreamscape-core-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dreamscape
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dreamscape_secure_password}
+      POSTGRES_DB: dreamscape_core
+    volumes:
+      - core-db-data:/var/lib/postgresql/data
+    networks:
+      - dreamscape-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dreamscape"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth/Dockerfile.prod
+    container_name: dreamscape-auth-service
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://dreamscape:${POSTGRES_PASSWORD:-dreamscape_secure_password}@core-db:5432/dreamscape_core?schema=auth
+      JWT_SECRET: ${JWT_SECRET:-your-production-jwt-secret-change-me}
+      JWT_EXPIRES_IN: 7d
+    depends_on:
+      core-db:
+        condition: service_healthy
+    networks:
+      - dreamscape-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  user-service:
+    build:
+      context: .
+      dockerfile: user/Dockerfile.prod
+    container_name: dreamscape-user-service
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      DATABASE_URL: postgresql://dreamscape:${POSTGRES_PASSWORD:-dreamscape_secure_password}@core-db:5432/dreamscape_core?schema=user
+      JWT_SECRET: ${JWT_SECRET:-your-production-jwt-secret-change-me}
+    depends_on:
+      core-db:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+    networks:
+      - dreamscape-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3002/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ========================================
+  # BUSINESS POD (payment + voyage + ai + PostgreSQL)
+  # ========================================
+
+  business-db:
+    image: postgres:15-alpine
+    container_name: dreamscape-business-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dreamscape
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dreamscape_secure_password}
+      POSTGRES_DB: dreamscape_business
+    volumes:
+      - business-db-data:/var/lib/postgresql/data
+    networks:
+      - dreamscape-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dreamscape"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: payment/Dockerfile.prod
+    container_name: dreamscape-payment-service
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    environment:
+      NODE_ENV: production
+      PORT: 3003
+      DATABASE_URL: postgresql://dreamscape:${POSTGRES_PASSWORD:-dreamscape_secure_password}@business-db:5432/dreamscape_business?schema=payment
+    depends_on:
+      business-db:
+        condition: service_healthy
+    networks:
+      - dreamscape-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3003/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  voyage-service:
+    build:
+      context: .
+      dockerfile: voyage/Dockerfile.prod
+    container_name: dreamscape-voyage-service
+    restart: unless-stopped
+    ports:
+      - "3004:3004"
+    environment:
+      NODE_ENV: production
+      PORT: 3004
+      DATABASE_URL: postgresql://dreamscape:${POSTGRES_PASSWORD:-dreamscape_secure_password}@business-db:5432/dreamscape_business?schema=voyage
+      AMADEUS_API_KEY: ${AMADEUS_API_KEY:-test-key}
+      AMADEUS_API_SECRET: ${AMADEUS_API_SECRET:-test-secret}
+    depends_on:
+      business-db:
+        condition: service_healthy
+    networks:
+      - dreamscape-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3004/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  ai-service:
+    build:
+      context: .
+      dockerfile: ai/Dockerfile.prod
+    container_name: dreamscape-ai-service
+    restart: unless-stopped
+    ports:
+      - "3005:3005"
+    environment:
+      NODE_ENV: production
+      PORT: 3005
+      DATABASE_URL: postgresql://dreamscape:${POSTGRES_PASSWORD:-dreamscape_secure_password}@business-db:5432/dreamscape_business?schema=ai
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-test-key}
+    depends_on:
+      business-db:
+        condition: service_healthy
+    networks:
+      - dreamscape-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3005/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  dreamscape-network:
+    driver: bridge
+    name: dreamscape-network
+
+volumes:
+  core-db-data:
+    name: dreamscape-core-db-data
+  business-db-data:
+    name: dreamscape-business-db-data
