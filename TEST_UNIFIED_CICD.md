@@ -24,3 +24,5 @@ Test effectué le : $(date -u +"%Y-%m-%d %H:%M:%S UTC")
 ✅ unified-cicd se déclenche dans dreamscape-infra
 ✅ GitHub Deployment créé
 ✅ Jira reçoit deployment_status
+
+## Update: Token also updated in dreamscape-infra
