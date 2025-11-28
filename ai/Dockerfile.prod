@@ -1,41 +1,45 @@
-# Dockerfile production pour ai-service
-FROM node:20-alpine AS builder
+# AI Service - Python Stub Server Dockerfile
+# Lightweight Python Flask stub for AI recommendations (no Node.js/TypeScript needed)
 
-WORKDIR /app
+FROM python:3.11-alpine
 
-# Copier les fichiers du service ai
-COPY ai/package.json ai/tsconfig.json ./ai/
-
-# Installer les dépendances
+# Set working directory
 WORKDIR /app/ai
-RUN npm install --production=false
 
-# Copier le code source
-COPY ai/src ./src
+# Install system dependencies
+RUN apk add --no-cache \
+    dumb-init \
+    gcc \
+    musl-dev \
+    linux-headers
 
-# Builder le TypeScript
-RUN npm run build
+# Install Python dependencies
+RUN pip install --no-cache-dir flask gunicorn
 
-# === Stage de production ===
-FROM node:20-alpine
+# Create non-root user
+RUN addgroup -g 1001 -S appuser && \
+    adduser -S -D -H -u 1001 -h /app -s /sbin/nologin -G appuser -g appuser appuser && \
+    chown -R appuser:appuser /app
 
-WORKDIR /app
+# Copy stub server (Python file, not TypeScript)
+COPY ai/src/stub_server.py ./src/
 
-# Installer dumb-init et python (pour certains packages ML)
-RUN apk add --no-cache dumb-init python3
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    AI_SERVICE_PORT=3004 \
+    PORT=3004
 
-# Copier les fichiers de build
-COPY --from=builder /app/ai/dist ./dist
-COPY --from=builder /app/ai/node_modules ./node_modules
-COPY --from=builder /app/ai/package.json ./package.json
+# Expose port
+EXPOSE 3004
 
-# Exposer le port
-EXPOSE 3005
+# Switch to non-root user
+USER appuser
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s \
-  CMD node -e "require('http').get('http://localhost:3005/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:3004/health')" || exit 1
 
-# Lancer avec dumb-init
+# Start stub server with Python (no build step)
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "dist/server.js"]
+CMD ["python", "src/stub_server.py"]

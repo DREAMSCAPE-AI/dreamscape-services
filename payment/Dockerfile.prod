@@ -1,44 +1,43 @@
-# Dockerfile production pour payment-service
-FROM node:20-alpine AS builder
+# Payment Service - Stub Server Dockerfile
+# Lightweight Node.js stub for payment processing (no TypeScript compilation needed)
 
-WORKDIR /app
-
-# Copier le workspace db (dépendance locale)
-COPY db ./db
-
-# Copier les fichiers du service payment
-COPY payment/package.json payment/tsconfig.json ./payment/
-
-# Installer les dépendances
-WORKDIR /app/payment
-RUN npm install --production=false
-
-# Copier le code source
-COPY payment/src ./src
-
-# Builder le TypeScript
-RUN npm run build
-
-# === Stage de production ===
 FROM node:20-alpine
 
-WORKDIR /app
+# Set working directory
+WORKDIR /app/payment
 
-# Installer dumb-init
+# Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
 
-# Copier les fichiers de build
-COPY --from=builder /app/payment/dist ./dist
-COPY --from=builder /app/payment/node_modules ./node_modules
-COPY --from=builder /app/payment/package.json ./package.json
+# Copy package files (only package.json, no tsconfig needed for stub)
+COPY payment/package*.json ./
 
-# Exposer le port
-EXPOSE 3003
+# Install only required dependencies for stub server
+RUN npm install --only=production express cors || npm install express cors
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S -D -H -u 1001 -h /app -s /sbin/nologin -G nodejs -g nodejs nodejs && \
+    chown -R nodejs:nodejs /app
+
+# Copy stub server (JS file, not TypeScript)
+COPY payment/src/stub-server.js ./src/
+
+# Set environment variables
+ENV NODE_ENV=production \
+    PORT=3005 \
+    PAYMENT_SERVICE_PORT=3005
+
+# Expose port
+EXPOSE 3005
+
+# Switch to non-root user
+USER nodejs
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s \
-  CMD node -e "require('http').get('http://localhost:3003/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:3005/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Lancer avec dumb-init
+# Start stub server (direct JS execution, no build step)
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "dist/server.js"]
+CMD ["node", "src/stub-server.js"]
