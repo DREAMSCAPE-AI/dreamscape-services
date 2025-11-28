@@ -32,3 +32,9 @@ Test effectué le : $(date -u +"%Y-%m-%d %H:%M:%S UTC")
 Test #3: Vérification complète après fix commonLabels → labels
 - Commit infra: aafad73 (fix applied to all 3 overlays)
 - Date: 2025-11-28T10:10:00Z
+
+Test #4: FINAL - unified-cicd.yml maintenant sur main
+- PR #40 mergée avec succès
+- unified-cicd.yml désormais sur la branche par défaut
+- repository_dispatch devrait déclencher le bon workflow
+- Date: 2025-11-28T10:25:00Z
