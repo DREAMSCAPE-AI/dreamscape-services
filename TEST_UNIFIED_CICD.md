@@ -38,3 +38,9 @@ Test #4: FINAL - unified-cicd.yml maintenant sur main
 - unified-cicd.yml désormais sur la branche par défaut
 - repository_dispatch devrait déclencher le bon workflow
 - Date: 2025-11-28T10:25:00Z
+
+Test #5: VALIDATION FINALE - Legacy workflows supprimés
+- PR #41 mergée: central-cicd.yml supprimé
+- Seul unified-cicd.yml reste actif
+- Test final du pipeline end-to-end
+- Date: 2025-11-28T10:35:00Z
