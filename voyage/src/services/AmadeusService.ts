@@ -466,6 +466,69 @@ class AmadeusService {
     }
   }
 
+  /**
+   * Create a hotel booking
+   * @param offerId - The hotel offer ID from search results
+   * @param guests - Array of guest information
+   * @param payments - Payment information
+   */
+  async createHotelBooking(params: {
+    offerId: string;
+    guests: Array<{
+      id?: number;
+      name: {
+        title: string;
+        firstName: string;
+        lastName: string;
+      };
+      contact: {
+        phone: string;
+        email: string;
+      };
+    }>;
+    payments: Array<{
+      method: string;
+      card?: {
+        vendorCode: string;
+        cardNumber: string;
+        expiryDate: string;
+      };
+    }>;
+  }): Promise<any> {
+    try {
+      const bookingData = {
+        data: {
+          offerId: params.offerId,
+          guests: params.guests.map((guest, index) => ({
+            id: guest.id || index + 1,
+            name: {
+              title: guest.name.title,
+              firstName: guest.name.firstName,
+              lastName: guest.name.lastName
+            },
+            contact: {
+              phone: guest.contact.phone,
+              email: guest.contact.email
+            }
+          })),
+          payments: params.payments.map(payment => ({
+            method: payment.method,
+            card: payment.card ? {
+              vendorCode: payment.card.vendorCode,
+              cardNumber: payment.card.cardNumber,
+              expiryDate: payment.card.expiryDate
+            } : undefined
+          }))
+        }
+      };
+
+      const response = await this.api.post('/v1/booking/hotel-bookings', bookingData);
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Hotel booking creation failed');
+    }
+  }
+
   async searchActivities(params: ActivitySearchParams) {
     try {
       const response = await this.api.get('/v1/shopping/activities', { params });

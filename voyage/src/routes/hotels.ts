@@ -248,17 +248,66 @@ router.get('/ratings', async (req: Request, res: Response): Promise<void> => {
 // Hotel Booking
 router.post('/bookings', async (req: Request, res: Response): Promise<void> => {
   try {
-    // Note: createHotelBooking method doesn't exist in AmadeusService
-    // This is a placeholder for future implementation
-    res.status(501).json({
-      error: 'Not implemented',
-      message: 'Hotel booking functionality is not yet implemented'
+    const { offerId, guests, payments } = req.body;
+
+    // Validate required fields
+    if (!offerId) {
+      res.status(400).json({
+        error: 'Missing required field: offerId'
+      });
+      return;
+    }
+
+    if (!guests || !Array.isArray(guests) || guests.length === 0) {
+      res.status(400).json({
+        error: 'Missing required field: guests (must be a non-empty array)'
+      });
+      return;
+    }
+
+    if (!payments || !Array.isArray(payments) || payments.length === 0) {
+      res.status(400).json({
+        error: 'Missing required field: payments (must be a non-empty array)'
+      });
+      return;
+    }
+
+    // Validate guest structure
+    for (const guest of guests) {
+      if (!guest.name || !guest.name.firstName || !guest.name.lastName) {
+        res.status(400).json({
+          error: 'Each guest must have name.firstName and name.lastName'
+        });
+        return;
+      }
+      if (!guest.contact || !guest.contact.email || !guest.contact.phone) {
+        res.status(400).json({
+          error: 'Each guest must have contact.email and contact.phone'
+        });
+        return;
+      }
+    }
+
+    // Create the booking
+    const result = await AmadeusService.createHotelBooking({
+      offerId,
+      guests,
+      payments
+    });
+
+    res.status(201).json({
+      data: result.data,
+      meta: {
+        bookingId: result.data?.id,
+        status: 'confirmed'
+      }
     });
   } catch (error) {
     console.error('Hotel booking error:', error);
     res.status(500).json({
       error: 'Failed to create hotel booking',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      message: error instanceof Error ? error.message : 'Unknown error',
+      details: process.env.NODE_ENV === 'development' ? (error as any).response?.data : undefined
     });
   }
 });
