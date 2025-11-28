@@ -26,3 +26,5 @@ Test effectué le : $(date -u +"%Y-%m-%d %H:%M:%S UTC")
 ✅ Jira reçoit deployment_status
 
 ## Update: Token also updated in dreamscape-infra
+
+## Retest avec Kustomize corrigé
