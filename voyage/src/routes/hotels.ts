@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { ParsedQs } from 'qs';
 import AmadeusService from '@/services/AmadeusService';
+import { hotelSearchCache, hotelDetailsCache, hotelListCache } from '@/middleware/hotelCache';
 
 const router = Router();
 
@@ -37,8 +38,8 @@ const parseArrayParam = (param: unknown): string[] => {
   return [];
 };
 
-// Search hotels
-router.get('/search', async (req: Request, res: Response): Promise<void> => {
+// Search hotels (with Redis cache - 5 min TTL)
+router.get('/search', hotelSearchCache, async (req: Request, res: Response): Promise<void> => {
   try {
     const {
       cityCode,
@@ -144,8 +145,8 @@ router.get('/search', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// Get hotel details
-router.get('/details/:hotelId', async (req: Request, res: Response): Promise<void> => {
+// Get hotel details (with Redis cache - 15 min TTL)
+router.get('/details/:hotelId', hotelDetailsCache, async (req: Request, res: Response): Promise<void> => {
   try {
     const { hotelId } = req.params;
     const { adults = '1', roomQuantity = '1', checkInDate, checkOutDate } = req.query;
@@ -255,8 +256,8 @@ router.post('/bookings', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// Hotel List
-router.get('/list', async (req: Request, res: Response): Promise<void> => {
+// Hotel List (with Redis cache - 1 hour TTL)
+router.get('/list', hotelListCache, async (req: Request, res: Response): Promise<void> => {
   try {
     const {
       cityCode,
