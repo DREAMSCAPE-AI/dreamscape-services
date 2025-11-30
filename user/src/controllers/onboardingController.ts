@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { prisma } from '@dreamscape/db';
 import { AuthRequest } from '@middleware/auth';
 import type {
@@ -87,8 +87,7 @@ const VALID_TRAVEL_TYPES = [
 ] as const;
 
 const VALID_TRAVEL_STYLES = [
-  'PLANNED', 'SPONTANEOUS', 'BALANCED', 'LUXURY', 'BUDGET',
-  'MID_RANGE', 'BACKPACKER', 'FLASHPACKER'
+  'PLANNED', 'SPONTANEOUS', 'MIXED'
 ] as const;
 
 const VALID_COMFORT_LEVELS = [
@@ -96,11 +95,11 @@ const VALID_COMFORT_LEVELS = [
 ] as const;
 
 const VALID_BUDGET_FLEXIBILITY = [
-  'FIXED', 'SOMEWHAT_FLEXIBLE', 'VERY_FLEXIBLE'
+  'STRICT', 'FLEXIBLE', 'VERY_FLEXIBLE'
 ] as const;
 
 const VALID_DATE_FLEXIBILITY = [
-  'FIXED', 'SOMEWHAT_FLEXIBLE', 'VERY_FLEXIBLE'
+  'FLEXIBLE', 'SEMI_FLEXIBLE', 'FIXED'
 ] as const;
 
 const VALID_ACTIVITY_LEVELS = [
@@ -108,7 +107,7 @@ const VALID_ACTIVITY_LEVELS = [
 ] as const;
 
 const VALID_RISK_TOLERANCE = [
-  'LOW', 'MODERATE', 'HIGH'
+  'CONSERVATIVE', 'MODERATE', 'ADVENTUROUS'
 ] as const;
 
 const validateStepData = (step: OnboardingStepKey, data: any): OnboardingValidationError[] => {

@@ -224,13 +224,13 @@ const transformToAIFormat = (
           currency: profile.globalBudgetRange.currency
         } : undefined,
         byCategory: profile?.budgetByCategory || undefined,
-        flexibility: profile?.budgetFlexibility?.toLowerCase() as 'strict' | 'flexible' | 'very_flexible' || null
+        flexibility: (profile?.budgetFlexibility?.toLowerCase() as 'strict' | 'flexible' | 'very_flexible') || null
       },
 
       travel: {
         types: profile?.travelTypes || [],
         purposes: profile?.travelPurposes || [],
-        style: profile?.travelStyle?.toLowerCase() as 'planned' | 'spontaneous' | 'mixed' || null,
+        style: (profile?.travelStyle?.toLowerCase() as 'planned' | 'spontaneous' | 'mixed') || null,
         groupTypes: profile?.travelGroupTypes || [],
         travelWithChildren: profile?.travelWithChildren || false,
         childrenAges: profile?.childrenAges || []
@@ -238,13 +238,13 @@ const transformToAIFormat = (
 
       timing: {
         preferredSeasons: profile?.preferredSeasons || [],
-        dateFlexibility: profile?.dateFlexibility?.toLowerCase() as 'flexible' | 'semi_flexible' | 'fixed' || null,
+        dateFlexibility: (profile?.dateFlexibility?.toLowerCase() as 'flexible' | 'semi_flexible' | 'fixed') || null,
         typicalDuration: profile?.preferredTripDuration || undefined
       },
 
       accommodation: {
         types: profile?.accommodationTypes || [],
-        comfortLevel: profile?.accommodationLevel?.toLowerCase() as 'basic' | 'standard' | 'premium' | 'luxury' || null,
+        comfortLevel: (profile?.accommodationLevel?.toLowerCase() as 'basic' | 'standard' | 'premium' | 'luxury') || null,
         serviceLevel: profile?.serviceLevel || undefined,
         privacyPreference: profile?.privacyPreference || undefined
       },
@@ -259,7 +259,7 @@ const transformToAIFormat = (
       activities: {
         types: profile?.activityTypes || [],
         interests: profile?.interestCategories || [],
-        activityLevel: profile?.activityLevel?.toLowerCase() as 'low' | 'moderate' | 'high' | 'very_high' || null
+        activityLevel: (profile?.activityLevel?.toLowerCase() as 'low' | 'moderate' | 'high' | 'very_high') || null
       },
 
       constraints: {
@@ -272,7 +272,7 @@ const transformToAIFormat = (
 
       experience: {
         level: profile?.experienceLevel || undefined,
-        riskTolerance: profile?.riskTolerance?.toLowerCase() as 'conservative' | 'moderate' | 'adventurous' || null,
+        riskTolerance: (profile?.riskTolerance?.toLowerCase() as 'conservative' | 'moderate' | 'adventurous') || null,
         culturalImmersion: profile?.culturalImmersion || undefined
       },
 

@@ -7,7 +7,7 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { DatabaseService } from '@database/DatabaseService';
 import router from '@routes/auth';
-import { errorHandler, notFoundHandler } from '@middleware/errorHandler';
+import { errorHandler } from '@middleware/errorHandler';
 import redisClient from '@config/redis';
 
 dotenv.config();
