@@ -6,6 +6,7 @@ import {
 } from '../../../shared/health';
 import DatabaseService from '../database/DatabaseService';
 import prisma from '../database/prisma';
+
 import cacheService from '../services/CacheService';
 
 const router = Router();
@@ -193,10 +194,12 @@ router.get('/ready', async (req: Request, res: Response): Promise<void> => {
 });
 
 /**
+
  * GET /health/cache
  * Cache statistics endpoint - DR-65US-VOYAGE-004
  *
  * Returns cache statistics and connection status
+
  */
 router.get('/cache', async (req: Request, res: Response): Promise<void> => {
   try {

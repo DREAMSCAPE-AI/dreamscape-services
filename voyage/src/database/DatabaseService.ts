@@ -1,4 +1,5 @@
 import prisma from './prisma';
+import type { PrismaClient } from '../../../db/node_modules/@prisma/client';
 
 // Types et interfaces
 interface DatabaseHealth {
@@ -93,7 +94,7 @@ export class DatabaseService {
   /**
    * Get Prisma client for database operations
    */
-  public getPrismaClient() {
+  public getPrismaClient(): PrismaClient {
     if (!this.postgresqlHealthy) {
       throw new Error('PostgreSQL not available');
     }
