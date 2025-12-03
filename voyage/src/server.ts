@@ -9,6 +9,7 @@ import routes from '@/routes';
 import { errorHandler, notFoundHandler } from '@/middleware/errorHandler';
 import { apiLimiter } from '@/middleware/rateLimiter';
 import DatabaseService, { type InitializationResult } from '@/database/DatabaseService';
+import redisClient from '@/config/redis';
 
 // Types pour l'application
 interface ServerState {
@@ -29,7 +30,6 @@ interface RootResponse {
   health_endpoint: string;
   databases: {
     postgresql: boolean;
-    mongodb: boolean;
   };
 }
 
@@ -122,8 +122,7 @@ function createApp(): Express {
       environment: config.nodeEnv,
       health_endpoint: `/api/health`,
       databases: {
-        postgresql: readiness.postgresql,
-        mongodb: readiness.mongodb
+        postgresql: readiness.postgresql
       }
     };
 
@@ -166,7 +165,6 @@ async function initializeDatabase(maxRetries: number = 3): Promise<Initializatio
       if (result.success) {
         console.log('✅ Database initialization successful');
         console.log(`📊 PostgreSQL: ${result.postgresql ? '✅' : '❌'}`);
-        console.log(`📊 MongoDB: ${result.mongodb ? '✅' : '⚠️ (optional)'}`);
         return result;
       }
     } catch (error) {
@@ -215,7 +213,14 @@ async function gracefulShutdown(signal: string): Promise<void> {
       });
     }
 
-    // 2. Fermer les connexions de base de données
+    // 2. Fermer la connexion Redis
+    if (redisClient.isReady()) {
+      console.log('🔒 Closing Redis connection...');
+      await redisClient.disconnect();
+      console.log('✅ Redis connection closed');
+    }
+
+    // 3. Fermer les connexions de base de données
     if (serverState.dbService) {
       console.log('🔒 Closing database connections...');
       await serverState.dbService.disconnect();
@@ -273,9 +278,17 @@ async function startServer(): Promise<void> {
     // 3. Initialisation de la base de données
     serverState.dbService = DatabaseService.getInstance();
     const dbResult = await initializeDatabase();
-    
+
     if (!dbResult.postgresql) {
       throw new Error('PostgreSQL connection is required for the application to start');
+    }
+
+    // 3.5. Initialisation de Redis (optionnel - pour le cache)
+    try {
+      await redisClient.connect();
+      console.log('✅ Redis connected (cache enabled)');
+    } catch (redisError) {
+      console.warn('⚠️ Redis connection failed - cache disabled, continuing without cache');
     }
 
     // 4. Création de l'application Express
@@ -292,7 +305,8 @@ async function startServer(): Promise<void> {
       console.log(`🚀 Dreamscape API server running on port ${config.port}`);
       console.log(`🌐 CORS origin: ${config.cors.origin}`);
       console.log(`🔗 Health check: http://localhost:${config.port}/api/health`);
-      console.log(`💾 Databases: PostgreSQL ✅${dbResult.mongodb ? ', MongoDB ✅' : ', MongoDB ⚠️ (optional)'}`);
+      console.log(`💾 Databases: PostgreSQL ✅`);
+      console.log(`🔴 Redis Cache: ${redisClient.isReady() ? '✅ enabled' : '⚠️ disabled'}`);
       console.log(`⏱️  Startup time: ${startupTime}ms`);
       console.log(`🆔 Process ID: ${process.pid}`);
       console.log('📊 Server ready to accept connections\n');
