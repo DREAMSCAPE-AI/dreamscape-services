@@ -6,7 +6,6 @@ import {
 } from '../../../shared/health';
 import DatabaseService from '../database/DatabaseService';
 import prisma from '../database/prisma';
-import cacheService from '../services/CacheService';
 
 const router = Router();
 
@@ -188,38 +187,6 @@ router.get('/ready', async (req: Request, res: Response): Promise<void> => {
       timestamp: new Date().toISOString(),
       reason: 'Service initialization error',
       error: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-});
-
-/**
- * GET /health/cache
- * Cache statistics endpoint - DR-65US-VOYAGE-004
- *
- * Returns cache statistics and connection status
- */
-router.get('/cache', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const stats = cacheService.getStats();
-    const isConnected = await cacheService.ping();
-
-    res.status(200).json({
-      status: isConnected ? 'healthy' : 'unhealthy',
-      timestamp: new Date().toISOString(),
-      cache: {
-        connected: isConnected,
-        ...stats,
-      },
-    });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      status: 'error',
-      timestamp: new Date().toISOString(),
-      error: errorMessage,
-      cache: {
-        connected: false,
-      },
     });
   }
 });
