@@ -121,18 +121,22 @@ router.get('/live', (req: Request, res: Response): void => {
  */
 router.get('/ready', async (req: Request, res: Response): Promise<void> => {
   try {
-    const dbService = DatabaseService.getInstance();
+    // Vérifier PostgreSQL avec un simple query
+    let postgresReady = false;
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      postgresReady = true;
+    } catch {
+      postgresReady = false;
+    }
 
-    // Vérifier que la DB est initialisée
-    const dbReady = dbService.isReady ? dbService.isReady() : { ready: false, postgresql: false };
-
-    if (dbReady.ready && dbReady.postgresql) {
+    if (postgresReady) {
       res.status(200).json({
         ready: true,
         service: 'ai-service',
         timestamp: new Date().toISOString(),
         dependencies: {
-          postgresql: dbReady.postgresql,
+          postgresql: postgresReady,
         },
       });
     } else {
@@ -142,7 +146,7 @@ router.get('/ready', async (req: Request, res: Response): Promise<void> => {
         timestamp: new Date().toISOString(),
         reason: 'PostgreSQL not ready',
         dependencies: {
-          postgresql: dbReady.postgresql,
+          postgresql: postgresReady,
         },
       });
     }

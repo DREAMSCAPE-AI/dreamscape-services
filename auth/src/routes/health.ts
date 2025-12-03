@@ -60,7 +60,43 @@ const createHealthChecker = () => {
         type: ComponentType.CACHE,
         critical: false,
         timeout: 2000,
-        check: createRedisCheck(redisClient),
+        check: async () => {
+          try {
+            const client = redisClient.getClient();
+            if (!client || !client.isReady) {
+              return {
+                status: 'unhealthy' as const,
+                message: 'Redis client not ready',
+                details: {
+                  connected: false,
+                },
+              };
+            }
+
+            const startTime = Date.now();
+            const pong = await client.ping();
+            const responseTime = Date.now() - startTime;
+
+            return {
+              status: 'healthy' as const,
+              message: 'Redis connection successful',
+              details: {
+                connected: true,
+                responseTime,
+              },
+            };
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            return {
+              status: 'unhealthy' as const,
+              message: `Redis connection failed: ${errorMessage}`,
+              details: {
+                connected: false,
+                error: errorMessage,
+              },
+            };
+          }
+        },
       },
     ],
   });
@@ -131,21 +167,25 @@ router.get('/live', (req: Request, res: Response): void => {
  */
 router.get('/ready', async (req: Request, res: Response): Promise<void> => {
   try {
-    const dbService = DatabaseService.getInstance();
-
-    // Vérifier que la DB est initialisée
-    const dbReady = dbService.isReady ? dbService.isReady() : false;
+    // Vérifier PostgreSQL avec un simple query
+    let postgresReady = false;
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      postgresReady = true;
+    } catch {
+      postgresReady = false;
+    }
 
     // Vérifier Redis (non-critique)
-    const redisReady = redisClient.isReady;
+    const redisReady = redisClient.isReady();
 
-    if (dbReady) {
+    if (postgresReady) {
       res.status(200).json({
         ready: true,
         service: 'auth-service',
         timestamp: new Date().toISOString(),
         dependencies: {
-          postgresql: dbReady,
+          postgresql: postgresReady,
           redis: redisReady,
         },
       });
@@ -156,7 +196,7 @@ router.get('/ready', async (req: Request, res: Response): Promise<void> => {
         timestamp: new Date().toISOString(),
         reason: 'PostgreSQL not ready',
         dependencies: {
-          postgresql: dbReady,
+          postgresql: postgresReady,
           redis: redisReady,
         },
       });
