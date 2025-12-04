@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '@dreamscape/db';
 import multer from 'multer';
 import path from 'path';
-import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { authenticateToken, AuthRequest } from '@middleware/auth';
 
 const router = Router();
 
@@ -233,12 +233,15 @@ router.put('/', authenticateToken, async (req: AuthRequest, res: Response): Prom
 
     // Update user profile if provided
     if (profile?.photo) {
+      // Get user data for firstName and lastName
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+
       await prisma.userProfile.upsert({
         where: { userId },
         create: {
           userId,
-          firstName: null,
-          lastName: null,
+          firstName: user?.firstName || '',
+          lastName: user?.lastName || '',
           avatar: profile.photo
         },
         update: {

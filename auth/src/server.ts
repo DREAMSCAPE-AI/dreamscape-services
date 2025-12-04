@@ -5,10 +5,10 @@ import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
-import { DatabaseService } from './database/DatabaseService';
-import router from './routes/auth';
-import { errorHandler, notFoundHandler } from './middleware/errorHandler';
-import redisClient from './config/redis';
+import { DatabaseService } from '@database/DatabaseService';
+import router from '@routes/auth';
+import { errorHandler } from '@middleware/errorHandler';
+import redisClient from '@config/redis';
 
 dotenv.config();
 
