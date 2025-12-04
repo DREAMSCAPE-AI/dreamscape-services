@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import DatabaseService, { type DatabaseHealth } from '../database/DatabaseService';
+import cacheService from '../services/CacheService';
 
 const router = Router();
 
@@ -20,17 +21,10 @@ interface HealthResponse {
       connected: boolean;
       error?: string;
     };
-    mongodb: {
-      status: 'healthy' | 'unhealthy' | 'optional';
-      responseTime?: number;
-      connected: boolean;
-      error?: string;
-    };
   };
   overall: {
     ready: boolean;
     critical_services_up: boolean;
-    optional_services_up: boolean;
   };
 }
 
@@ -46,10 +40,6 @@ interface ErrorResponse {
       environment: string;
     };
     postgresql: {
-      status: 'unhealthy';
-      connected: boolean;
-    };
-    mongodb: {
       status: 'unhealthy';
       connected: boolean;
     };
@@ -89,10 +79,6 @@ router.get('/', async (req: Request, res: Response<HealthResponse | ErrorRespons
           postgresql: {
             status: 'unhealthy',
             connected: false
-          },
-          mongodb: {
-            status: 'unhealthy',
-            connected: false
           }
         }
       };
@@ -110,9 +96,6 @@ router.get('/', async (req: Request, res: Response<HealthResponse | ErrorRespons
     if (!dbHealth.postgresql) {
       overallStatus = 'unhealthy';
       statusCode = 503;
-    } else if (!dbHealth.mongodb) {
-      overallStatus = 'degraded'; // MongoDB est optionnel
-      statusCode = 206; // Partial Content
     }
 
     const response: HealthResponse = {
@@ -130,18 +113,11 @@ router.get('/', async (req: Request, res: Response<HealthResponse | ErrorRespons
           responseTime: dbHealth.details.postgresql.responseTime,
           connected: dbHealth.details.postgresql.connected,
           error: dbHealth.details.postgresql.error
-        },
-        mongodb: {
-          status: dbHealth.mongodb ? 'healthy' : 'unhealthy',
-          responseTime: dbHealth.details.mongodb.responseTime,
-          connected: dbHealth.details.mongodb.connected,
-          error: dbHealth.details.mongodb.error
         }
       },
       overall: {
         ready: dbHealth.overall,
-        critical_services_up: dbHealth.postgresql,
-        optional_services_up: dbHealth.mongodb
+        critical_services_up: dbHealth.postgresql
       }
     };
 
@@ -168,10 +144,6 @@ router.get('/', async (req: Request, res: Response<HealthResponse | ErrorRespons
           environment: process.env.NODE_ENV || 'development'
         },
         postgresql: {
-          status: 'unhealthy',
-          connected: false
-        },
-        mongodb: {
           status: 'unhealthy',
           connected: false
         }
@@ -215,9 +187,9 @@ router.get('/ready', (req: Request, res: Response): void => {
 });
 
 /**
- * Liveness probe endpoint  
+ * Liveness probe endpoint
  * GET /api/health/live
- * 
+ *
  * Simple check if the service is alive
  */
 router.get('/live', (req: Request, res: Response): void => {
@@ -226,6 +198,39 @@ router.get('/live', (req: Request, res: Response): void => {
     timestamp: new Date().toISOString(),
     uptime: Math.round(process.uptime())
   });
+});
+
+/**
+ * Cache statistics endpoint
+ * GET /api/health/cache
+ *
+ * Ticket: DR-65US-VOYAGE-004 - Cache des Requêtes Amadeus
+ * Returns cache statistics and connection status
+ */
+router.get('/cache', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const stats = cacheService.getStats();
+    const isConnected = await cacheService.ping();
+
+    res.status(200).json({
+      status: isConnected ? 'healthy' : 'unhealthy',
+      timestamp: new Date().toISOString(),
+      cache: {
+        connected: isConnected,
+        ...stats
+      }
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      error: errorMessage,
+      cache: {
+        connected: false
+      }
+    });
+  }
 });
 
 export default router;

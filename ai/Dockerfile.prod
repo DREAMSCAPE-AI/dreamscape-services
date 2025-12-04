@@ -1,0 +1,45 @@
+# AI Service - Python Stub Server Dockerfile
+# Lightweight Python Flask stub for AI recommendations (no Node.js/TypeScript needed)
+
+FROM python:3.11-alpine
+
+# Set working directory
+WORKDIR /app/ai
+
+# Install system dependencies
+RUN apk add --no-cache \
+    dumb-init \
+    gcc \
+    musl-dev \
+    linux-headers
+
+# Install Python dependencies
+RUN pip install --no-cache-dir flask gunicorn
+
+# Create non-root user
+RUN addgroup -g 1001 -S appuser && \
+    adduser -S -D -H -u 1001 -h /app -s /sbin/nologin -G appuser -g appuser appuser && \
+    chown -R appuser:appuser /app
+
+# Copy stub server (Python file, not TypeScript)
+COPY ai/src/stub_server.py ./src/
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    AI_SERVICE_PORT=3004 \
+    PORT=3004
+
+# Expose port
+EXPOSE 3004
+
+# Switch to non-root user
+USER appuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:3004/health')" || exit 1
+
+# Start stub server with Python (no build step)
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["python", "src/stub_server.py"]

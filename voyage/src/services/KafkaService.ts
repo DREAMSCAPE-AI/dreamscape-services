@@ -236,7 +236,8 @@ class VoyageKafkaService {
     }
 
     if (subscriptions.length > 0) {
-      await this.client.subscribe(CONSUMER_GROUPS.VOYAGE_SERVICE, subscriptions);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await this.client.subscribe(CONSUMER_GROUPS.VOYAGE_SERVICE, subscriptions as any);
       console.log('[VoyageKafkaService] Subscribed to payment and user events');
     }
   }
