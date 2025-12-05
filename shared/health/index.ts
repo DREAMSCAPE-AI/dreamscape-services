@@ -1,0 +1,8 @@
+/**
+ * Health Check Module - INFRA-013.1
+ * Export central pour tous les composants de health check
+ */
+
+export * from './type';
+export * from './checks';
+export { HealthChecker, default as DefaultHealthChecker } from './HealthChecker';

@@ -6,11 +6,13 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { prisma } from '@dreamscape/db';
 // import activitiesRoutes from './routes/activities'; // TODO: Fix AmadeusService import
-import profileRoutes from '@routes/profile';
+
+import profileRoutes from './routes/profile';
+import healthRoutes from './routes/health';
 import onboardingRoutes from '@routes/onboarding';
 import aiIntegrationRoutes from '@routes/aiIntegration';
-import { apiLimiter } from '@middleware/rateLimiter';
-import { errorHandler } from '@middleware/errorHandler';
+import { apiLimiter } from './middleware/rateLimiter';
+import { errorHandler } from './middleware/errorHandler';
 
 dotenv.config();
 
@@ -42,14 +44,9 @@ app.use('/api/v1/users/profile', profileRoutes);
 app.use('/api/v1/users/onboarding', onboardingRoutes);
 app.use('/api/v1/ai', aiIntegrationRoutes);
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'user-service',
-    timestamp: new Date().toISOString()
-  });
-});
+// Health check routes - INFRA-013.1
+app.use('/health', healthRoutes);
+app.use('/api/health', healthRoutes); // Alternative path for consistency
 
 // Error handling
 app.use(errorHandler);

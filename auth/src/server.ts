@@ -5,10 +5,11 @@ import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
-import { DatabaseService } from '@database/DatabaseService';
-import router from '@routes/auth';
-import { errorHandler } from '@middleware/errorHandler';
-import redisClient from '@config/redis';
+import { DatabaseService } from './database/DatabaseService';
+import router from './routes/auth';
+import healthRoutes from './routes/health';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import redisClient from './config/redis';
 
 dotenv.config();
 
@@ -33,42 +34,9 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use('/api/v1/auth', router);
 
-app.get('/health', async (req, res) => {
-  const dbService = DatabaseService.getInstance();
-  const startTime = process.uptime();
-
-  try {
-    // Check database connectivity
-    const dbHealthy = await dbService.healthCheck();
-    const redisHealthy = redisClient.isReady();
-
-    res.json({
-      status: 'ok',
-      service: 'auth-service',
-      version: process.env.npm_package_version || '1.0.0',
-      timestamp: new Date().toISOString(),
-      uptime: Math.floor(startTime),
-      environment: process.env.NODE_ENV || 'development',
-      database: {
-        postgresql: dbHealthy.postgresql || false
-      },
-      cache: {
-        redis: redisHealthy
-      },
-      memory: {
-        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
-        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024)
-      }
-    });
-  } catch (error) {
-    res.status(503).json({
-      status: 'degraded',
-      service: 'auth-service',
-      timestamp: new Date().toISOString(),
-      error: 'Database health check failed'
-    });
-  }
-});
+// Health check routes - INFRA-013.1
+app.use('/health', healthRoutes);
+app.use('/api/health', healthRoutes); // Alternative path for consistency
 
 app.use(errorHandler);
 

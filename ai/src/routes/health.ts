@@ -4,18 +4,18 @@ import {
   ComponentType,
   HealthStatus,
 } from '../../../shared/health';
-import DatabaseService from '../database/DatabaseService';
+import { DatabaseService } from '../database/DatabaseService';
 import prisma from '../database/prisma';
 
 const router = Router();
 
 /**
  * Health Check Configuration - INFRA-013.1
- * Voyage Service health checks
+ * AI Service health checks
  */
 const createHealthChecker = () => {
   return new HealthChecker({
-    serviceName: 'voyage-service',
+    serviceName: 'ai-service',
     serviceVersion: process.env.npm_package_version || '1.0.0',
     includeMetadata: true,
     checks: [
@@ -52,40 +52,6 @@ const createHealthChecker = () => {
           }
         },
       },
-      // MongoDB - OPTIONAL (if configured)
-      ...(process.env.MONGODB_URI
-        ? [
-            {
-              name: 'MongoDB',
-              type: ComponentType.DATABASE,
-              critical: false, // MongoDB is optional for voyage service
-              timeout: 3000,
-              check: async () => {
-                try {
-                  // MongoDB check if needed - placeholder for now
-                  return {
-                    status: HealthStatus.HEALTHY,
-                    message: 'MongoDB not configured or optional',
-                    details: {
-                      connected: false,
-                      optional: true,
-                    },
-                  };
-                } catch (error) {
-                  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                  return {
-                    status: HealthStatus.DEGRADED,
-                    message: `MongoDB check failed: ${errorMessage}`,
-                    details: {
-                      connected: false,
-                      error: errorMessage,
-                    },
-                  };
-                }
-              },
-            },
-          ]
-        : []),
     ],
   });
 };
@@ -110,17 +76,17 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     const totalTime = Date.now() - startTime;
 
     console.log(
-      `🏥 [Voyage] Health check completed in ${totalTime}ms - Status: ${healthReport.status}`
+      `🏥 [AI] Health check completed in ${totalTime}ms - Status: ${healthReport.status}`
     );
 
     res.status(statusCode).json(healthReport);
   } catch (error) {
     const totalTime = Date.now() - startTime;
-    console.error(`💥 [Voyage] Health check failed in ${totalTime}ms:`, error);
+    console.error(`💥 [AI] Health check failed in ${totalTime}ms:`, error);
 
     res.status(500).json({
       status: 'error',
-      service: 'voyage-service',
+      service: 'ai-service',
       timestamp: new Date().toISOString(),
       error: error instanceof Error ? error.message : 'Health check failed',
     });
@@ -138,7 +104,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 router.get('/live', (req: Request, res: Response): void => {
   res.status(200).json({
     alive: true,
-    service: 'voyage-service',
+    service: 'ai-service',
     timestamp: new Date().toISOString(),
     uptime: Math.floor(process.uptime()),
   });
@@ -167,7 +133,7 @@ router.get('/ready', async (req: Request, res: Response): Promise<void> => {
     if (postgresReady) {
       res.status(200).json({
         ready: true,
-        service: 'voyage-service',
+        service: 'ai-service',
         timestamp: new Date().toISOString(),
         dependencies: {
           postgresql: postgresReady,
@@ -176,7 +142,7 @@ router.get('/ready', async (req: Request, res: Response): Promise<void> => {
     } else {
       res.status(503).json({
         ready: false,
-        service: 'voyage-service',
+        service: 'ai-service',
         timestamp: new Date().toISOString(),
         reason: 'PostgreSQL not ready',
         dependencies: {
@@ -187,7 +153,7 @@ router.get('/ready', async (req: Request, res: Response): Promise<void> => {
   } catch (error) {
     res.status(503).json({
       ready: false,
-      service: 'voyage-service',
+      service: 'ai-service',
       timestamp: new Date().toISOString(),
       reason: 'Service initialization error',
       error: error instanceof Error ? error.message : 'Unknown error',
