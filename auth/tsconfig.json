@@ -20,7 +20,10 @@
       "@types": ["src/types/index.ts"],
       "@services/*": ["src/services/*"],
       "@middleware/*": ["src/middleware/*"],
-      "@dreamscape/db": ["../db/index.ts"]
+      "@dreamscape/db": ["../db/index.ts"],
+      "@config/*": ["src/config/*"],
+      "@routes/*": ["src/routes/*"],
+      "@database/*": ["src/database/*"],
     }
   },
   "include": [
