@@ -3,7 +3,7 @@ import {
   HealthChecker,
   ComponentType,
   HealthStatus,
-} from '../../../shared/health';
+} from '../../../shared/health/index';
 import DatabaseService from '../database/DatabaseService';
 import prisma from '../database/prisma';
 
