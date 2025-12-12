@@ -4,8 +4,12 @@ import {
   ComponentType,
   HealthStatus,
 } from '../../../shared/health';
-import { DatabaseService } from '../database/DatabaseService';
 import prisma from '../database/prisma';
+import {
+  healthCheckStatus,
+  healthCheckDuration,
+  healthCheckExecutions,
+} from '../config/metrics'; // INFRA-013.2
 
 const router = Router();
 
@@ -18,6 +22,12 @@ const createHealthChecker = () => {
     serviceName: 'ai-service',
     serviceVersion: process.env.npm_package_version || '1.0.0',
     includeMetadata: true,
+    // INFRA-013.2: Intégration Prometheus
+    prometheusMetrics: {
+      healthCheckStatus,
+      healthCheckDuration,
+      healthCheckExecutions,
+    },
     checks: [
       // PostgreSQL - CRITICAL
       {

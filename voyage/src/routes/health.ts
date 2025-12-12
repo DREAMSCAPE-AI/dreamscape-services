@@ -1,11 +1,13 @@
 import { Router, Request, Response } from 'express';
+import { HealthChecker } from '../../../shared/health/HealthChecker.ts';
+import { ComponentType, HealthStatus } from '../../../shared/health/type.ts';
+import DatabaseService from '../database/DatabaseService.js';
+import prisma from '../database/prisma.js';
 import {
-  HealthChecker,
-  ComponentType,
-  HealthStatus,
-} from '../../../shared/health';
-import DatabaseService from '../database/DatabaseService';
-import prisma from '../database/prisma';
+  healthCheckStatus,
+  healthCheckDuration,
+  healthCheckExecutions,
+} from '../config/metrics.js'; // INFRA-013.2
 
 const router = Router();
 
@@ -18,6 +20,12 @@ const createHealthChecker = () => {
     serviceName: 'voyage-service',
     serviceVersion: process.env.npm_package_version || '1.0.0',
     includeMetadata: true,
+    // INFRA-013.2: Int�gration Prometheus
+    prometheusMetrics: {
+      healthCheckStatus,
+      healthCheckDuration,
+      healthCheckExecutions,
+    },
     checks: [
       // PostgreSQL - CRITICAL
       {

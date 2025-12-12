@@ -8,6 +8,11 @@ import {
 import { DatabaseService } from '../database/DatabaseService';
 import redisClient from '../config/redis';
 import prisma from '../database/prisma';
+import {
+  healthCheckStatus,
+  healthCheckDuration,
+  healthCheckExecutions,
+} from '../config/metrics'; // INFRA-013.2
 
 const router = Router();
 
@@ -20,6 +25,12 @@ const createHealthChecker = () => {
     serviceName: 'auth-service',
     serviceVersion: process.env.npm_package_version || '1.0.0',
     includeMetadata: true,
+    // INFRA-013.2: Int�gration Prometheus
+    prometheusMetrics: {
+      healthCheckStatus,
+      healthCheckDuration,
+      healthCheckExecutions,
+    },
     checks: [
       // PostgreSQL - CRITICAL
       {

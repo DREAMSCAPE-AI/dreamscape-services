@@ -8,8 +8,10 @@ import { prisma } from '@dreamscape/db';
 // import activitiesRoutes from './routes/activities'; // TODO: Fix AmadeusService import
 import profileRoutes from './routes/profile';
 import healthRoutes from './routes/health';
+import metricsRoutes from './routes/metrics'; // INFRA-013.2
 import { apiLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/errorHandler';
+import { metricsMiddleware } from './middleware/metricsMiddleware'; // INFRA-013.2
 
 dotenv.config();
 
@@ -29,6 +31,10 @@ app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Metrics collection middleware - INFRA-013.2
+// Must be before rate limiting to capture all requests
+app.use(metricsMiddleware);
+
 // Rate limiting
 app.use(apiLimiter);
 
@@ -38,6 +44,10 @@ app.use('/uploads', express.static('uploads'));
 // Routes
 // app.use('/api/v1/activities', activitiesRoutes); // TODO: Fix AmadeusService import
 app.use('/api/v1/users/profile', profileRoutes);
+
+// Metrics endpoint - INFRA-013.2
+// This should be accessible to Prometheus but ideally not publicly
+app.use('/metrics', metricsRoutes);
 
 // Health check routes - INFRA-013.1
 app.use('/health', healthRoutes);

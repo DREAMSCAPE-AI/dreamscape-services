@@ -8,8 +8,9 @@ import {
 } from './type';
 
 /**
- * HealthChecker - INFRA-013.1
- * Classe centralisée pour gérer les health checks de tous les services
+ * HealthChecker - INFRA-013.1 & INFRA-013.2
+ * Classe centralisï¿½e pour gï¿½rer les health checks de tous les services
+ * + Intï¿½gration Prometheus pour monitoring et alerting
  */
 export class HealthChecker {
   private config: HealthCheckerConfig;
@@ -21,14 +22,14 @@ export class HealthChecker {
   }
 
   /**
-   * Exécute tous les health checks configurés
-   * @param timeout - Timeout global en ms (défaut: 5000ms)
+   * Exï¿½cute tous les health checks configurï¿½s
+   * @param timeout - Timeout global en ms (dï¿½faut: 5000ms)
    */
   async performHealthCheck(timeout: number = 5000): Promise<HealthResponse> {
     const checkResults: HealthCheckResult[] = [];
     let overallStatus: HealthStatus = HealthStatus.HEALTHY;
 
-    // Exécuter tous les checks en parallèle
+    // Exï¿½cuter tous les checks en parallï¿½le
     const checkPromises = this.config.checks.map(async (check) => {
       const result = await this.executeCheck(check);
       checkResults.push(result);
@@ -45,10 +46,13 @@ export class HealthChecker {
       console.error('Health check execution error:', error);
     }
 
-    // Déterminer le statut global
+    // Dï¿½terminer le statut global
     overallStatus = this.calculateOverallStatus(checkResults);
 
-    // Construire la réponse
+    // INFRA-013.2: Mettre ï¿½ jour les mï¿½triques Prometheus
+    this.updatePrometheusMetrics(checkResults, overallStatus);
+
+    // Construire la rï¿½ponse
     const response: HealthResponse = {
       status: overallStatus,
       timestamp: new Date(),
@@ -58,7 +62,7 @@ export class HealthChecker {
       checks: checkResults,
     };
 
-    // Ajouter les métadonnées si demandé
+    // Ajouter les mï¿½tadonnï¿½es si demandï¿½
     if (this.config.includeMetadata) {
       response.metadata = this.collectMetadata();
     }
@@ -67,14 +71,14 @@ export class HealthChecker {
   }
 
   /**
-   * Exécute un check individuel avec timeout
+   * Exï¿½cute un check individuel avec timeout
    */
   private async executeCheck(check: HealthCheck): Promise<HealthCheckResult> {
     const startTime = Date.now();
-    const checkTimeout = check.timeout || 3000; // Timeout par défaut: 3s
+    const checkTimeout = check.timeout || 3000; // Timeout par dï¿½faut: 3s
 
     try {
-      // Exécuter le check avec timeout
+      // Exï¿½cuter le check avec timeout
       const result = await Promise.race([
         check.check(),
         this.timeout(checkTimeout, `Check timeout: ${check.name}`),
@@ -107,7 +111,7 @@ export class HealthChecker {
   }
 
   /**
-   * Calcule le statut global basé sur les résultats des checks
+   * Calcule le statut global basï¿½ sur les rï¿½sultats des checks
    */
   private calculateOverallStatus(results: HealthCheckResult[]): HealthStatus {
     // Si un check critique est UNHEALTHY -> service UNHEALTHY
@@ -141,7 +145,7 @@ export class HealthChecker {
   }
 
   /**
-   * Collecte les métadonnées système
+   * Collecte les mï¿½tadonnï¿½es systï¿½me
    */
   private collectMetadata() {
     const memUsage = process.memoryUsage();
@@ -164,7 +168,51 @@ export class HealthChecker {
   }
 
   /**
-   * Helper pour créer une Promise de timeout
+   * INFRA-013.2: Met ï¿½ jour les mï¿½triques Prometheus aprï¿½s chaque health check
+   */
+  private updatePrometheusMetrics(
+    checkResults: HealthCheckResult[],
+    overallStatus: HealthStatus
+  ): void {
+    if (!this.config.prometheusMetrics) {
+      return; // Pas de mï¿½triques configurï¿½es
+    }
+
+    const metrics = this.config.prometheusMetrics;
+
+    // 1. Mettre ï¿½ jour le statut de chaque check (Gauge)
+    if (metrics.healthCheckStatus) {
+      checkResults.forEach((result) => {
+        const statusValue = result.status === HealthStatus.HEALTHY ? 1 : 0;
+        metrics.healthCheckStatus
+          .labels(result.name, result.type)
+          .set(statusValue);
+      });
+    }
+
+    // 2. Enregistrer la durï¿½e de chaque check (Histogram)
+    if (metrics.healthCheckDuration) {
+      checkResults.forEach((result) => {
+        if (result.responseTime !== undefined) {
+          metrics.healthCheckDuration
+            .labels(result.name, result.status)
+            .observe(result.responseTime / 1000); // Convertir ms en secondes
+        }
+      });
+    }
+
+    // 3. Incrï¿½menter le compteur d'exï¿½cutions (Counter)
+    if (metrics.healthCheckExecutions) {
+      checkResults.forEach((result) => {
+        metrics.healthCheckExecutions
+          .labels(result.name, result.status)
+          .inc();
+      });
+    }
+  }
+
+  /**
+   * Helper pour crï¿½er une Promise de timeout
    */
   private timeout(ms: number, message: string): Promise<never> {
     return new Promise((_, reject) => {
@@ -173,7 +221,7 @@ export class HealthChecker {
   }
 
   /**
-   * Obtenir le statut HTTP approprié basé sur le statut de santé
+   * Obtenir le statut HTTP appropriï¿½ basï¿½ sur le statut de santï¿½
    */
   static getHttpStatus(healthStatus: HealthStatus): number {
     switch (healthStatus) {

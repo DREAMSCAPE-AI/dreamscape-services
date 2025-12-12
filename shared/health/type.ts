@@ -24,6 +24,12 @@ export interface HealthCheckResult {
   timestamp: Date;
 }
 
+export interface HealthCheckPartialResult {
+  status: HealthStatus;
+  message?: string;
+  details?: Record<string, any>;
+}
+
 export interface HealthResponse {
   status: HealthStatus;
   timestamp: Date;
@@ -51,7 +57,13 @@ export interface HealthCheck {
   type: ComponentType;
   critical: boolean;
   timeout?: number;
-  check: () => Promise<HealthCheckResult>;
+  check: () => Promise<HealthCheckPartialResult>;
+}
+
+export interface PrometheusMetrics {
+  healthCheckStatus?: any; // Gauge
+  healthCheckDuration?: any; // Histogram
+  healthCheckExecutions?: any; // Counter
 }
 
 export interface HealthCheckerConfig {
@@ -59,4 +71,5 @@ export interface HealthCheckerConfig {
   serviceVersion: string;
   checks: HealthCheck[];
   includeMetadata?: boolean;
+  prometheusMetrics?: PrometheusMetrics; // INFRA-013.2
 }

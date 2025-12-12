@@ -8,8 +8,10 @@ import { DatabaseService } from './database/DatabaseService';
 import recommendationsRoutes from './routes/recommendations';
 import predictionsRoutes from './routes/predictions';
 import healthRoutes from './routes/health';
-import { rateLimiter } from './middleware/rateLimiter';
+import metricsRoutes from './routes/metrics'; // INFRA-013.2
+import { apiLimiter as rateLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/errorHandler';
+import { metricsMiddleware } from './middleware/metricsMiddleware'; // INFRA-013.2
 
 dotenv.config();
 
@@ -32,12 +34,21 @@ app.use(express.urlencoded({ extended: true }));
 // Rate limiting
 app.use(rateLimiter);
 
+// Metrics collection middleware - INFRA-013.2
+// Must be before routes to capture all requests
+app.use(metricsMiddleware);
+
 // Routes
 app.use('/api/v1/recommendations', recommendationsRoutes);
 app.use('/api/v1/predictions', predictionsRoutes);
 
-// Health check - INFRA-013.1
+// Health check routes - INFRA-013.1
 app.use('/health', healthRoutes);
+app.use('/api/health', healthRoutes); // Alternative path for consistency
+
+// Metrics endpoint - INFRA-013.2
+// This should be accessible to Prometheus but ideally not publicly
+app.use('/metrics', metricsRoutes);
 
 // Error handling
 app.use(errorHandler);

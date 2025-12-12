@@ -8,6 +8,9 @@ import { config } from '@/config/environment';
 import routes from '@/routes';
 import { errorHandler, notFoundHandler } from '@/middleware/errorHandler';
 import { apiLimiter } from '@/middleware/rateLimiter';
+import { metricsMiddleware } from '@/middleware/metricsMiddleware'; // INFRA-013.2
+import metricsRoutes from '@/routes/metrics'; // INFRA-013.2
+import healthRoutes from '@/routes/health'; // INFRA-013.1
 import DatabaseService, { type InitializationResult } from '@/database/DatabaseService';
 import redisClient from '@/config/redis';
 
@@ -97,16 +100,28 @@ function createApp(): Express {
     type: ['application/json', 'application/vnd.api+json']
   }));
   
-  app.use(express.urlencoded({ 
-    extended: true, 
-    limit: '10mb' 
+  app.use(express.urlencoded({
+    extended: true,
+    limit: '10mb'
   }));
+
+  // Metrics collection middleware - INFRA-013.2
+  // Must be before routes to capture all requests
+  app.use(metricsMiddleware);
 
   // Rate limiting (avant les routes)
   app.use('/api', apiLimiter);
 
   // API routes
   app.use('/api', routes);
+
+  // Health check routes - INFRA-013.1
+  // Direct /health endpoint for consistency across services
+  app.use('/health', healthRoutes);
+
+  // Metrics endpoint - INFRA-013.2
+  // This should be accessible to Prometheus but ideally not publicly
+  app.use('/metrics', metricsRoutes);
 
   // Root endpoint avec informations détaillées
   app.get('/', (req: Request, res: Response<RootResponse>): void => {
