@@ -72,4 +72,5 @@ export interface HealthCheckerConfig {
   checks: HealthCheck[];
   includeMetadata?: boolean;
   prometheusMetrics?: PrometheusMetrics; // INFRA-013.2
+
 }

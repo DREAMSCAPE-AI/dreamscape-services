@@ -5,6 +5,7 @@ import {
   HealthStatus,
 } from '../../../shared/health';
 import { prisma } from '@dreamscape/db';
+
 import {
   healthCheckStatus,
   healthCheckDuration,
@@ -22,7 +23,6 @@ const createHealthChecker = () => {
     serviceName: 'user-service',
     serviceVersion: process.env.npm_package_version || '1.0.0',
     includeMetadata: true,
-    // INFRA-013.2: Int�gration Prometheus
     prometheusMetrics: {
       healthCheckStatus,
       healthCheckDuration,

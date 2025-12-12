@@ -13,7 +13,6 @@ import {
   healthCheckDuration,
   healthCheckExecutions,
 } from '../config/metrics'; // INFRA-013.2
-
 const router = Router();
 
 /**

@@ -2,7 +2,8 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '@dreamscape/db';
 import multer from 'multer';
 import path from 'path';
-import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { authenticateToken, AuthRequest } from '@middleware/auth';
+import { userKafkaService } from '../services/KafkaService';
 
 const router = Router();
 
@@ -162,6 +163,23 @@ router.post('/:userId', async (req: Request, res: Response): Promise<void> => {
       }
     });
 
+    // Publish UserProfileUpdated event
+    try {
+      await userKafkaService.publishProfileUpdated({
+        userId,
+        profile: {
+          firstName,
+          lastName,
+          phone,
+          dateOfBirth: dateOfBirth || undefined,
+        },
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (kafkaError) {
+      console.error('Failed to publish profile updated event:', kafkaError);
+      // Don't fail the request if Kafka publishing fails
+    }
+
     res.status(201).json(profile);
   } catch (error: any) {
     if (error.code === 'P2002') {
@@ -233,12 +251,15 @@ router.put('/', authenticateToken, async (req: AuthRequest, res: Response): Prom
 
     // Update user profile if provided
     if (profile?.photo) {
+      // Get user data for firstName and lastName
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+
       await prisma.userProfile.upsert({
         where: { userId },
         create: {
           userId,
-          firstName: null,
-          lastName: null,
+          firstName: user?.firstName || '',
+          lastName: user?.lastName || '',
           avatar: profile.photo
         },
         update: {
@@ -255,6 +276,64 @@ router.put('/', authenticateToken, async (req: AuthRequest, res: Response): Prom
         settings: true
       }
     });
+
+    // Publish events for changes
+    const now = new Date().toISOString();
+
+    try {
+      // Publish UserUpdated if basic user info changed
+      if (profile?.name !== undefined || profile?.email !== undefined) {
+        const changes: Record<string, { old: unknown; new: unknown }> = {};
+        if (profile?.name !== undefined) {
+          changes['username'] = { old: null, new: profile.name };
+        }
+        if (profile?.email !== undefined) {
+          changes['email'] = { old: null, new: profile.email };
+        }
+
+        await userKafkaService.publishUserUpdated({
+          userId,
+          changes,
+          updatedAt: now,
+        });
+      }
+
+      // Publish UserProfileUpdated if photo changed
+      if (profile?.photo) {
+        await userKafkaService.publishProfileUpdated({
+          userId,
+          profile: {
+            avatar: profile.photo,
+          },
+          updatedAt: now,
+        });
+      }
+
+      // Publish UserPreferencesUpdated if preferences changed
+      if (preferences || notifications || privacy || travel) {
+        await userKafkaService.publishPreferencesUpdated({
+          userId,
+          preferences: {
+            language: preferences?.language,
+            currency: preferences?.currency,
+            notifications: notifications ? {
+              email: notifications.dealAlerts ?? true,
+              sms: notifications.tripReminders ?? true,
+              push: notifications.priceAlerts ?? true,
+            } : undefined,
+            travelPreferences: travel ? {
+              seatPreference: travel.preferredDestinations?.[0],
+              mealPreference: travel.dietary?.[0],
+              classPreference: travel.accommodationType?.[0],
+            } : undefined,
+          },
+          updatedAt: now,
+        });
+      }
+    } catch (kafkaError) {
+      console.error('Failed to publish user update events:', kafkaError);
+      // Don't fail the request if Kafka publishing fails
+    }
 
     res.json({
       message: 'Profile updated successfully',
@@ -321,7 +400,21 @@ router.post('/:userId/avatar', upload.single('avatar'), async (req: Request, res
       }
     });
 
-    res.json({ 
+    // Publish UserProfileUpdated event for avatar change
+    try {
+      await userKafkaService.publishProfileUpdated({
+        userId,
+        profile: {
+          avatar: avatarUrl,
+        },
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (kafkaError) {
+      console.error('Failed to publish profile updated event:', kafkaError);
+      // Don't fail the request if Kafka publishing fails
+    }
+
+    res.json({
       message: 'Avatar uploaded successfully',
       avatar: avatarUrl,
       profile
