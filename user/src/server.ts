@@ -13,6 +13,7 @@ import onboardingRoutes from '@routes/onboarding';
 import aiIntegrationRoutes from '@routes/aiIntegration';
 import { apiLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/errorHandler';
+import { userKafkaService } from './services/KafkaService';
 
 dotenv.config();
 
@@ -65,14 +66,23 @@ const startServer = async () => {
     // Test database connection
     await prisma.$connect();
     console.log('✅ PostgreSQL database connected successfully');
-    
+
+    // Initialize Kafka service
+    try {
+      await userKafkaService.initialize();
+      console.log('✅ Kafka service initialized successfully');
+    } catch (kafkaError) {
+      console.warn('⚠️  Kafka service initialization failed (continuing without Kafka):', kafkaError);
+      // Continue without Kafka - service should still work
+    }
+
     // Create uploads directory if it doesn't exist
     const fs = require('fs');
     const uploadsDir = 'uploads/avatars';
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
-    
+
     app.listen(PORT, () => {
       console.log(`🚀 User service running on port ${PORT}`);
     });
@@ -81,6 +91,30 @@ const startServer = async () => {
     process.exit(1);
   }
 };
+
+// Graceful shutdown handler
+const shutdown = async () => {
+  console.log('\n🛑 Shutting down user service...');
+
+  try {
+    // Close Kafka connections
+    await userKafkaService.shutdown();
+    console.log('✅ Kafka service disconnected');
+
+    // Close database connections
+    await prisma.$disconnect();
+    console.log('✅ Database disconnected');
+
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Error during shutdown:', error);
+    process.exit(1);
+  }
+};
+
+// Handle shutdown signals
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
 startServer();
 
