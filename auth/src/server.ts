@@ -10,6 +10,7 @@ import router from './routes/auth';
 import healthRoutes from './routes/health';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import redisClient from './config/redis';
+import authKafkaService from './services/KafkaService';
 
 dotenv.config();
 
@@ -70,6 +71,15 @@ const startServer = async () => {
       console.warn('⚠️ Service will continue without Redis caching and session management');
     }
 
+    // Initialize Kafka - DR-374 / DR-375
+    try {
+      await authKafkaService.initialize();
+      console.log('✅ Kafka initialized successfully');
+    } catch (error) {
+      console.warn('⚠️ Kafka initialization failed (non-critical):', error);
+      console.warn('⚠️ Service will continue without event publishing');
+    }
+
     const gracefulShutdown = async (signal: string) => {
       console.log(`\n🔄 Received ${signal}, starting graceful shutdown...`);
 
@@ -83,6 +93,10 @@ const startServer = async () => {
           console.log('✅ Redis disconnected');
         }
 
+        // Disconnect Kafka - DR-374 / DR-375
+        await authKafkaService.shutdown();
+        console.log('✅ Kafka disconnected');
+
         process.exit(0);
       } catch (error) {
         console.error('❌ Error during graceful shutdown:', error);
@@ -93,10 +107,14 @@ const startServer = async () => {
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-    app.listen(PORT, () => {
+    app.listen(PORT, async () => {
       console.log(`🚀 Auth service running on port ${PORT}`);
       console.log(`🌐 Client URL: ${process.env.CLIENT_URL || 'http://localhost:5173'}`);
       console.log(`💾 Redis: ${redisClient.isReady() ? '✅ Connected' : '⚠️ Not available'}`);
+
+      // Check Kafka health - DR-374 / DR-375
+      const kafkaHealth = await authKafkaService.healthCheck();
+      console.log(`📨 Kafka: ${kafkaHealth.healthy ? '✅ Connected' : '⚠️ Not available'}`);
     });
   } catch (error) {
     console.error('💥 Failed to start server:', error);
