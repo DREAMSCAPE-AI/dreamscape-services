@@ -112,7 +112,7 @@ jobs:
 
             if [[ -d "${SERVICE_DIR}" ]] && [[ -f "${SERVICE_DIR}/package.json" ]]; then
               echo "🔍 Linting ${service}..."
-              (cd "${SERVICE_DIR}" && npm ci && npm run lint --if-present) || echo "⚠️ Lint issues in ${service}"
+              (cd "${SERVICE_DIR}" && npm install && npm run lint --if-present) || echo "⚠️ Lint issues in ${service}"
             fi
           done
 
