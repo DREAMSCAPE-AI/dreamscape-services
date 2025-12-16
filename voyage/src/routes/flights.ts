@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import AmadeusService from '@/services/AmadeusService';
 import { FlightOfferMapper } from '@/mappers/FlightOfferMapper';
+import voyageKafkaService from '@/services/KafkaService';
 
 const router = Router();
 
@@ -53,6 +54,24 @@ router.get('/search', async (req: Request, res: Response): Promise<void> => {
     // Map to internal DTOs then simplify for frontend
     const offers = FlightOfferMapper.mapToDTOs(result.data);
     const simplified = FlightOfferMapper.mapToSimplifiedList(offers);
+
+    // Publish search performed event - DR-402 / DR-404
+    voyageKafkaService.publishSearchPerformed({
+      searchId: `search-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+      userId: (req as any).user?.id || 'anonymous',
+      searchType: 'flight',
+      origin: resolvedOrigin,
+      destination: resolvedDestination,
+      departureDate: departureDate as string,
+      returnDate: returnDate as string,
+      passengers: {
+        adults: parseInt(adults as string),
+        children: parseInt(children as string),
+        infants: parseInt(infants as string)
+      },
+      resultsCount: simplified.length,
+      timestamp: new Date()
+    }).catch(err => console.error('[FlightSearch] Failed to publish Kafka event:', err));
 
     res.json({
       data: simplified,
