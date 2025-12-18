@@ -11,6 +11,10 @@ import { apiLimiter } from '@/middleware/rateLimiter';
 import DatabaseService, { type InitializationResult } from '@/database/DatabaseService';
 import redisClient from '@/config/redis';
 import voyageKafkaService from '@/services/KafkaService';
+import {
+  handlePaymentCompleted,
+  handlePaymentFailed,
+} from '@/handlers/paymentEventsHandler';
 
 // Types pour l'application
 interface ServerState {
@@ -304,6 +308,13 @@ async function startServer(): Promise<void> {
     try {
       await voyageKafkaService.initialize();
       console.log('✅ Kafka initialized successfully');
+
+      // Subscribe to payment events for Saga Pattern - DR-391 / DR-392
+      await voyageKafkaService.subscribeToEvents({
+        onPaymentCompleted: handlePaymentCompleted,
+        onPaymentFailed: handlePaymentFailed,
+      });
+      console.log('✅ Subscribed to payment events (Saga Pattern)');
     } catch (kafkaError) {
       console.warn('⚠️ Kafka initialization failed (non-critical):', kafkaError);
       console.warn('⚠️ Service will continue without event publishing');
