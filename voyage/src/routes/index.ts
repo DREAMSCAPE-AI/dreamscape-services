@@ -6,6 +6,7 @@ import transfersRouter from './transfers';
 import airlinesRouter from './airlines';
 import airportsRouter from './airports';
 import healthRouter from './health';
+import activitiesRouter from './activities';
 
 const router = Router();
 
@@ -19,5 +20,6 @@ router.use('/locations', locationsRouter);
 router.use('/transfers', transfersRouter);
 router.use('/airlines', airlinesRouter);
 router.use('/airports', airportsRouter);
+router.use('/activities', activitiesRouter);
 
 export default router;
