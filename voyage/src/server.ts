@@ -13,6 +13,11 @@ import metricsRoutes from '@/routes/metrics'; // INFRA-013.2
 import healthRoutes from '@/routes/health'; // INFRA-013.1
 import DatabaseService, { type InitializationResult } from '@/database/DatabaseService';
 import redisClient from '@/config/redis';
+import voyageKafkaService from '@/services/KafkaService';
+import {
+  handlePaymentCompleted,
+  handlePaymentFailed,
+} from '@/handlers/paymentEventsHandler';
 
 // Types pour l'application
 interface ServerState {
@@ -235,6 +240,14 @@ async function gracefulShutdown(signal: string): Promise<void> {
       console.log('✅ Redis connection closed');
     }
 
+    // 2.5. Fermer la connexion Kafka - DR-402 / DR-403
+    try {
+      await voyageKafkaService.shutdown();
+      console.log('✅ Kafka disconnected');
+    } catch (kafkaError) {
+      console.warn('⚠️ Error closing Kafka connection:', kafkaError);
+    }
+
     // 3. Fermer les connexions de base de données
     if (serverState.dbService) {
       console.log('🔒 Closing database connections...');
@@ -306,15 +319,31 @@ async function startServer(): Promise<void> {
       console.warn('⚠️ Redis connection failed - cache disabled, continuing without cache');
     }
 
+    // 3.6. Initialisation de Kafka - DR-402 / DR-403
+    try {
+      await voyageKafkaService.initialize();
+      console.log('✅ Kafka initialized successfully');
+
+      // Subscribe to payment events for Saga Pattern - DR-391 / DR-392
+      await voyageKafkaService.subscribeToEvents({
+        onPaymentCompleted: handlePaymentCompleted,
+        onPaymentFailed: handlePaymentFailed,
+      });
+      console.log('✅ Subscribed to payment events (Saga Pattern)');
+    } catch (kafkaError) {
+      console.warn('⚠️ Kafka initialization failed (non-critical):', kafkaError);
+      console.warn('⚠️ Service will continue without event publishing');
+    }
+
     // 4. Création de l'application Express
     const app = createApp();
     console.log('✅ Express app created');
 
     // 5. Démarrage du serveur HTTP
-    serverState.server = app.listen(config.port, () => {
+    serverState.server = app.listen(config.port, async () => {
       serverState.isRunning = true;
       serverState.startedAt = new Date();
-      
+
       const startupTime = Date.now() - startTime;
       console.log('\n🎉 Server started successfully!');
       console.log(`🚀 Dreamscape API server running on port ${config.port}`);
@@ -322,6 +351,11 @@ async function startServer(): Promise<void> {
       console.log(`🔗 Health check: http://localhost:${config.port}/api/health`);
       console.log(`💾 Databases: PostgreSQL ✅`);
       console.log(`🔴 Redis Cache: ${redisClient.isReady() ? '✅ enabled' : '⚠️ disabled'}`);
+
+      // Check Kafka health - DR-402 / DR-403
+      const kafkaHealth = await voyageKafkaService.healthCheck();
+      console.log(`📨 Kafka: ${kafkaHealth.healthy ? '✅ Connected' : '⚠️ Not available'}`);
+
       console.log(`⏱️  Startup time: ${startupTime}ms`);
       console.log(`🆔 Process ID: ${process.pid}`);
       console.log('📊 Server ready to accept connections\n');

@@ -12,6 +12,17 @@ import metricsRoutes from './routes/metrics'; // INFRA-013.2
 import { apiLimiter as rateLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/errorHandler';
 import { metricsMiddleware } from './middleware/metricsMiddleware'; // INFRA-013.2
+import aiKafkaService from './services/KafkaService';
+import {
+  handleUserPreferencesUpdated,
+  handleUserProfileUpdated,
+} from './handlers/userEventsHandler';
+import {
+  handleVoyageSearchPerformed,
+  handleVoyageBookingCreated,
+  handleFlightSelected,
+  handleHotelSelected,
+} from './handlers/voyageEventsHandler';
 
 dotenv.config();
 
@@ -64,14 +75,62 @@ app.use('*', (req, res) => {
 // Start server
 const startServer = async () => {
   try {
+    // Initialize database
     await DatabaseService.connect();
-    console.log('Database connected successfully');
-    
-    app.listen(PORT, () => {
-      console.log(`AI service running on port ${PORT}`);
+    console.log('✅ Database connected successfully');
+
+    // Initialize Kafka and subscribe to events - DR-387
+    try {
+      await aiKafkaService.initialize();
+      console.log('✅ Kafka initialized successfully');
+
+      // Subscribe to user and voyage events for AI analysis - DR-388 / DR-389
+      await aiKafkaService.subscribeToEvents({
+        onUserPreferencesUpdated: handleUserPreferencesUpdated,
+        onUserProfileUpdated: handleUserProfileUpdated,
+        onSearchPerformed: handleVoyageSearchPerformed,
+        onBookingCreated: handleVoyageBookingCreated,
+        onFlightSelected: handleFlightSelected,
+        onHotelSelected: handleHotelSelected,
+      });
+      console.log('✅ Subscribed to user and voyage events');
+    } catch (kafkaError) {
+      console.warn('⚠️ Kafka initialization failed (non-critical):', kafkaError);
+      console.warn('⚠️ Service will continue without event consumption');
+    }
+
+    // Graceful shutdown
+    const gracefulShutdown = async (signal: string) => {
+      console.log(`\n🔄 Received ${signal}, starting graceful shutdown...`);
+
+      try {
+        // Disconnect Kafka
+        await aiKafkaService.shutdown();
+        console.log('✅ Kafka disconnected');
+
+        // Disconnect database
+        await DatabaseService.disconnect();
+        console.log('✅ Database disconnected');
+
+        process.exit(0);
+      } catch (error) {
+        console.error('❌ Error during graceful shutdown:', error);
+        process.exit(1);
+      }
+    };
+
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+    app.listen(PORT, async () => {
+      console.log(`🤖 AI Service running on port ${PORT}`);
+
+      // Check Kafka health
+      const kafkaHealth = await aiKafkaService.healthCheck();
+      console.log(`📨 Kafka: ${kafkaHealth.healthy ? '✅ Connected' : '⚠️ Not available'}`);
     });
   } catch (error) {
-    console.error('Failed to start server:', error);
+    console.error('💥 Failed to start server:', error);
     process.exit(1);
   }
 };

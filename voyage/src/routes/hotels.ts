@@ -3,6 +3,7 @@ import { ParsedQs } from 'qs';
 import AmadeusService from '@/services/AmadeusService';
 import { HotelOfferMapper } from '@/mappers/HotelOfferMapper';
 import { hotelSearchCache, hotelDetailsCache, hotelListCache } from '@/middleware/hotelCache';
+import voyageKafkaService from '@/services/KafkaService';
 
 const router = Router();
 
@@ -121,6 +122,24 @@ router.get('/search', hotelSearchCache, async (req: Request, res: Response): Pro
 
       // Map to simplified DTOs for frontend
       const simplifiedHotels = HotelOfferMapper.mapAmadeusToSimplified(result.data || []);
+
+      // Publish search performed event - DR-402 / DR-404
+      voyageKafkaService.publishSearchPerformed({
+        searchId: `search-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+        userId: (req as any).user?.id || 'anonymous',
+        searchType: 'hotel',
+        origin: cityCodeStr || `${latitudeNum},${longitudeNum}`,
+        destination: cityCodeStr || `${latitudeNum},${longitudeNum}`,
+        departureDate: checkInDate as string,
+        returnDate: checkOutDate as string,
+        passengers: {
+          adults: parseInt(adults as string),
+          children: 0,
+          infants: 0
+        },
+        resultsCount: simplifiedHotels.length,
+        timestamp: new Date()
+      }).catch(err => console.error('[HotelSearch] Failed to publish Kafka event:', err));
 
       res.json({
         data: simplifiedHotels,

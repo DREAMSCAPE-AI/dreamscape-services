@@ -3,6 +3,6 @@
  * Export central pour tous les composants de health check
  */
 
-export * from './type';
+export { HealthStatus, ComponentType, HealthCheckResult, HealthResponse, HealthCheck, HealthCheckerConfig} from './type';
 export * from './checks';
 export { HealthChecker, default as DefaultHealthChecker } from './HealthChecker';

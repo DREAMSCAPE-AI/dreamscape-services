@@ -529,12 +529,44 @@ class AmadeusService {
     }
   }
 
-  async searchActivities(params: ActivitySearchParams) {
+  async searchActivities(params: {
+    latitude?: number;
+    longitude?: number;
+    radius?: number;
+    north?: number;
+    west?: number;
+    south?: number;
+    east?: number;
+  }): Promise<any> {
     try {
+      await this.authenticate();
+
+      const DEBUG_MODE = false; // Set to true to enable detailed logging
+
+      if (DEBUG_MODE) {
+        console.log('🚀 [AmadeusService] Searching activities with params:', params);
+      }
+
       const response = await this.api.get('/v1/shopping/activities', { params });
+
+      if (DEBUG_MODE) {
+        console.log('✅ [AmadeusService] Activities search successful');
+        console.log('📊 [AmadeusService] Response structure:', {
+          hasData: !!response.data?.data,
+          dataCount: response.data?.data?.length || 0,
+          hasMeta: !!response.data?.meta
+        });
+
+        if (response.data?.data && response.data.data.length > 0) {
+          const firstActivity = response.data.data[0];
+          console.log('📍 [AmadeusService] First activity raw data:', JSON.stringify(firstActivity, null, 2));
+        }
+      }
+
       return response.data;
     } catch (error) {
-      throw this.handleError(error, 'Activities search failed');
+      console.error('❌ [AmadeusService] searchActivities error:', error);
+      throw error;
     }
   }
 
@@ -1135,6 +1167,17 @@ class AmadeusService {
       return response.data;
     } catch (error) {
       throw this.handleError(error, 'Flight offers pricing failed');
+    }
+  }
+
+  async getActivityById(activityId: string): Promise<any> {
+    try {
+      await this.authenticate();
+      const response = await this.api.get(`/v1/shopping/activities/${activityId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Amadeus getActivityById error:', error);
+      throw error;
     }
   }
 }

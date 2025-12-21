@@ -18,6 +18,7 @@ import {
   type VoyageHotelSelectedPayload,
   type VoyageBookingCreatedPayload,
   type UserPreferencesUpdatedPayload,
+  type UserProfileUpdatedPayload,
   type MessageHandler,
 } from '@dreamscape/kafka';
 
@@ -147,6 +148,7 @@ class AIKafkaService {
     onHotelSelected?: MessageHandler<VoyageHotelSelectedPayload>;
     onBookingCreated?: MessageHandler<VoyageBookingCreatedPayload>;
     onUserPreferencesUpdated?: MessageHandler<UserPreferencesUpdatedPayload>;
+    onUserProfileUpdated?: MessageHandler<UserProfileUpdatedPayload>;
   }): Promise<void> {
     if (!this.client) {
       console.warn('[AIKafkaService] Client not initialized, cannot subscribe');
@@ -187,6 +189,13 @@ class AIKafkaService {
       subscriptions.push({
         topic: KAFKA_TOPICS.USER_PREFERENCES_UPDATED,
         handler: handlers.onUserPreferencesUpdated,
+      });
+    }
+
+    if (handlers.onUserProfileUpdated) {
+      subscriptions.push({
+        topic: KAFKA_TOPICS.USER_PROFILE_UPDATED,
+        handler: handlers.onUserProfileUpdated,
       });
     }
 
