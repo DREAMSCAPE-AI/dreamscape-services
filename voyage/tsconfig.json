@@ -1,36 +1,39 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
-    "module": "ESNext",
-    "lib": ["ES2020"],
-    "moduleResolution": "node",
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
+    "target": "ES2022",
+    "module": "commonjs",
+    "lib": ["ES2022"],
+    "outDir": "./dist",
     "strict": true,
+    "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "outDir": "./dist",
-    "baseUrl": "./src",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "sourceMap": true,
+    "declaration": false,
+    "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"],
-      "@/config/*": ["./config/*"],
-      "@/config": ["./config"],
-      "@/services/*": ["./services/*"],
-      "@/services": ["./services"],
-      "@/routes/*": ["./routes/*"],
-      "@/routes": ["./routes"],
-      "@/middleware/*": ["./middleware/*"],
-      "@/middleware": ["./middleware"],
-      "@/database/*": ["./database/*"],
-      "@/database": ["./database"],
-      "@/dto/*": ["./dto/*"],
-      "@/mappers/*": ["./mappers/*"]
-    },
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true
+      "@/*": ["src/*"],
+      "@/config/*": ["src/config/*"],
+      "@/services/*": ["src/services/*"],
+      "@/routes/*": ["src/routes/*"],
+      "@/middleware/*": ["src/middleware/*"],
+      "@/dto/*": ["src/dto/*"],
+      "@/mappers/*": ["src/mappers/*"],
+      "@dreamscape/db": ["../db/index.ts"]
+    }
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+  "include": ["src/**/*", "../db/**/*"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "src/database/seed.ts",
+    "../db/seed.ts"
+  ]
 }

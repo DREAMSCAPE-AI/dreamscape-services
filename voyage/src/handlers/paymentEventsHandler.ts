@@ -1,6 +1,7 @@
 /**
  * Payment Events Handler for Voyage Service
  * DR-391: Saga Pattern - Handles payment events to confirm/cancel bookings
+ * DR-505: Cart flow - Create booking from cart after payment confirmation
  */
 
 import {
@@ -8,20 +9,18 @@ import {
   type PaymentCompletedPayload,
   type PaymentFailedPayload,
 } from '@dreamscape/kafka';
-import { PrismaClient, BookingStatus } from '@prisma/client';
+import prisma from '@/database/prisma';
 import voyageKafkaService from '@/services/KafkaService';
+import BookingService from '@/services/BookingService';
 
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: `${process.env.DATABASE_URL}?schema=voyage`,
-    },
-  },
-});
+// Booking status types (matching Prisma enum)
+type BookingStatus = 'DRAFT' | 'PENDING_PAYMENT' | 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED' | 'FAILED';
 
 /**
  * Handle payment.completed event
- * Confirms booking after successful payment (DR-393)
+ * Confirms booking after successful payment (DR-393 + DR-505)
+ * - Confirms booking status
+ * - Clears user's cart
  */
 export const handlePaymentCompleted: MessageHandler<PaymentCompletedPayload> = async ({
   event,
@@ -32,41 +31,8 @@ export const handlePaymentCompleted: MessageHandler<PaymentCompletedPayload> = a
   console.log(`[Voyage] Payment completed: ${paymentId} for booking ${bookingId}`);
 
   try {
-    // Find booking by reference (bookingId from payment)
-    const booking = await prisma.bookingData.findUnique({
-      where: { reference: bookingId },
-    });
-
-    if (!booking) {
-      console.error(`[Voyage] Booking not found: ${bookingId}`);
-      throw new Error(`Booking ${bookingId} not found`);
-    }
-
-    // Verify booking belongs to user
-    if (booking.userId !== userId) {
-      console.error(`[Voyage] User mismatch: booking ${bookingId} belongs to ${booking.userId}, not ${userId}`);
-      throw new Error(`User ${userId} is not authorized for booking ${bookingId}`);
-    }
-
-    // Check if booking is in pending status
-    if (booking.status !== BookingStatus.PENDING) {
-      console.warn(`[Voyage] Booking ${bookingId} is not in PENDING status (current: ${booking.status})`);
-      // Idempotency: If already confirmed, don't fail
-      if (booking.status === BookingStatus.CONFIRMED) {
-        console.log(`[Voyage] Booking ${bookingId} already confirmed, skipping`);
-        return;
-      }
-      throw new Error(`Booking ${bookingId} cannot be confirmed (status: ${booking.status})`);
-    }
-
-    // Update booking status to CONFIRMED
-    const updatedBooking = await prisma.bookingData.update({
-      where: { id: booking.id },
-      data: {
-        status: BookingStatus.CONFIRMED,
-        updatedAt: new Date(),
-      },
-    });
+    // Use BookingService to confirm booking and clear cart
+    const updatedBooking = await BookingService.confirmBooking(bookingId, userId);
 
     console.log(`✅ [Voyage] Booking ${bookingId} confirmed successfully`);
 
@@ -74,14 +40,14 @@ export const handlePaymentCompleted: MessageHandler<PaymentCompletedPayload> = a
     try {
       await voyageKafkaService.publishBookingConfirmed(
         {
-          bookingId: booking.reference,
-          userId: booking.userId,
-          bookingType: booking.type,
+          bookingId: updatedBooking.reference,
+          userId: updatedBooking.userId,
+          bookingType: updatedBooking.type,
           status: 'confirmed',
-          totalAmount: Number(booking.totalAmount),
-          currency: booking.currency,
+          totalAmount: Number(updatedBooking.totalAmount),
+          currency: updatedBooking.currency,
           paymentId,
-          confirmedAt: updatedBooking.updatedAt.toISOString(),
+          confirmedAt: updatedBooking.confirmedAt?.toISOString() || new Date().toISOString(),
         },
         event.metadata?.correlationId
       );
@@ -99,7 +65,8 @@ export const handlePaymentCompleted: MessageHandler<PaymentCompletedPayload> = a
 
 /**
  * Handle payment.failed event
- * Cancels booking after failed payment (DR-394)
+ * Marks booking as FAILED after payment failure (DR-394 + DR-505)
+ * Note: Cart is NOT cleared - user can retry payment
  */
 export const handlePaymentFailed: MessageHandler<PaymentFailedPayload> = async ({
   event,
@@ -110,55 +77,19 @@ export const handlePaymentFailed: MessageHandler<PaymentFailedPayload> = async (
   console.log(`[Voyage] Payment failed: ${paymentId} for booking ${bookingId} - ${errorMessage}`);
 
   try {
-    // Find booking by reference
-    const booking = await prisma.bookingData.findUnique({
-      where: { reference: bookingId },
-    });
+    // Use BookingService to mark booking as failed
+    const reason = `payment_failed: ${errorCode || 'UNKNOWN'} - ${errorMessage || 'Payment processing failed'}`;
+    const updatedBooking = await BookingService.failBooking(bookingId, userId, reason);
 
-    if (!booking) {
-      console.error(`[Voyage] Booking not found: ${bookingId}`);
-      throw new Error(`Booking ${bookingId} not found`);
-    }
+    console.log(`❌ [Voyage] Booking ${bookingId} marked as FAILED`);
 
-    // Verify booking belongs to user
-    if (booking.userId !== userId) {
-      console.error(`[Voyage] User mismatch: booking ${bookingId} belongs to ${booking.userId}, not ${userId}`);
-      throw new Error(`User ${userId} is not authorized for booking ${bookingId}`);
-    }
-
-    // Check if booking is in pending status
-    if (booking.status !== BookingStatus.PENDING) {
-      console.warn(`[Voyage] Booking ${bookingId} is not in PENDING status (current: ${booking.status})`);
-      // Idempotency: If already cancelled, don't fail
-      if (booking.status === BookingStatus.CANCELLED) {
-        console.log(`[Voyage] Booking ${bookingId} already cancelled, skipping`);
-        return;
-      }
-      // If confirmed, this is a problem - payment shouldn't fail after confirmation
-      if (booking.status === BookingStatus.CONFIRMED) {
-        console.error(`[Voyage] Payment failed but booking ${bookingId} is already CONFIRMED - manual intervention required`);
-        throw new Error(`Inconsistent state: booking ${bookingId} is confirmed but payment failed`);
-      }
-    }
-
-    // Update booking status to CANCELLED
-    const updatedBooking = await prisma.bookingData.update({
-      where: { id: booking.id },
-      data: {
-        status: BookingStatus.CANCELLED,
-        updatedAt: new Date(),
-      },
-    });
-
-    console.log(`✅ [Voyage] Booking ${bookingId} cancelled successfully`);
-
-    // Publish voyage.booking.cancelled event
+    // Publish voyage.booking.cancelled event (for failed payment)
     try {
       await voyageKafkaService.publishBookingCancelled(
         {
-          bookingId: booking.reference,
-          userId: booking.userId,
-          reason: `payment_failed: ${errorCode} - ${errorMessage}`,
+          bookingId: updatedBooking.reference,
+          userId: updatedBooking.userId,
+          reason,
           cancelledAt: updatedBooking.updatedAt.toISOString(),
         },
         event.metadata?.correlationId
@@ -166,7 +97,7 @@ export const handlePaymentFailed: MessageHandler<PaymentFailedPayload> = async (
       console.log(`📤 [Voyage] Published booking.cancelled event for ${bookingId}`);
     } catch (publishError) {
       console.error(`⚠️ [Voyage] Failed to publish booking.cancelled event:`, publishError);
-      // Don't throw - booking is cancelled in DB, event publishing is best-effort
+      // Don't throw - booking is failed in DB, event publishing is best-effort
     }
 
   } catch (error) {
