@@ -325,20 +325,58 @@ router.post('/checkout', async (req: Request, res: Response): Promise<void> => {
     // - Check activity availability (when implemented)
     // - Return 409 Conflict if any item is no longer available
 
-    // Phase 4: Create DRAFT booking from cart
-    // Note: We create a temporary payment intent ID - will be replaced by actual Stripe Payment Intent
-    const tempPaymentIntentId = `pi_temp_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    // Step 1: Create Stripe Payment Intent via Payment Service
+    const PAYMENT_SERVICE_URL = process.env.PAYMENT_SERVICE_URL || 'http://localhost:3004';
 
+    let paymentIntent: {
+      paymentIntentId: string;
+      clientSecret: string;
+      amount: number;
+      currency: string;
+      status: string;
+    };
+
+    try {
+      const paymentResponse = await fetch(`${PAYMENT_SERVICE_URL}/api/v1/payment/create-intent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: Math.round(Number(cart.totalPrice) * 100), // Convert to cents
+          currency: cart.currency.toLowerCase(),
+          bookingId: 'temp', // Will be updated after booking creation
+          bookingReference: 'temp', // Will be updated after booking creation
+          userId,
+          metadata: req.body.metadata || {},
+        }),
+      });
+
+      if (!paymentResponse.ok) {
+        throw new Error(`Payment service error: ${paymentResponse.statusText}`);
+      }
+
+      const paymentData = await paymentResponse.json() as { success: boolean; data: typeof paymentIntent };
+      paymentIntent = paymentData.data;
+
+      console.log(`✅ [CartRoutes] Payment Intent created: ${paymentIntent.paymentIntentId}`);
+    } catch (paymentError) {
+      console.error('[CartRoutes] Failed to create payment intent:', paymentError);
+      res.status(500).json({
+        error: 'Failed to initialize payment',
+        message: paymentError instanceof Error ? paymentError.message : 'Payment service unavailable'
+      });
+      return;
+    }
+
+    // Step 2: Create DRAFT booking with real Payment Intent ID
     const booking = await BookingService.createBookingFromCart({
       userId,
-      paymentIntentId: tempPaymentIntentId,
+      paymentIntentId: paymentIntent.paymentIntentId,
       metadata: req.body.metadata || {},
     });
 
-    // TODO: Phase 5 - Integrate with payment-service
-    // - Call payment-service to create Stripe Payment Intent
-    // - Update booking with real paymentIntentId
-    // - Return payment client secret for frontend
+    console.log(`✅ [CartRoutes] Booking created: ${booking.reference} with Payment Intent: ${paymentIntent.paymentIntentId}`);
 
     const bookingData = booking.data as unknown as BookingDataPayload;
 
@@ -351,11 +389,13 @@ router.post('/checkout', async (req: Request, res: Response): Promise<void> => {
         items: bookingData.items,
         status: booking.status,
         createdAt: booking.createdAt,
-        // TODO: Add real payment intent details from payment-service
+        // Payment details from Stripe
         payment: {
-          clientSecret: null, // TODO: From Stripe Payment Intent
+          clientSecret: paymentIntent.clientSecret,
           publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || null,
-          paymentIntentId: tempPaymentIntentId
+          paymentIntentId: paymentIntent.paymentIntentId,
+          amount: paymentIntent.amount,
+          currency: paymentIntent.currency
         }
       },
       meta: {

@@ -48,13 +48,13 @@ export class BookingService {
   private determineBookingType(items: any[]): BookingType {
     if (items.length === 1) {
       const itemType = items[0].type;
-      if (itemType === 'FLIGHT') return BookingType.FLIGHT;
-      if (itemType === 'HOTEL') return BookingType.HOTEL;
-      if (itemType === 'ACTIVITY') return BookingType.ACTIVITY;
+      if (itemType === 'FLIGHT') return 'FLIGHT';
+      if (itemType === 'HOTEL') return 'HOTEL';
+      if (itemType === 'ACTIVITY') return 'ACTIVITY';
     }
 
     // Multiple items = package booking
-    return BookingType.PACKAGE;
+    return 'PACKAGE';
   }
 
   /**
@@ -83,7 +83,7 @@ export class BookingService {
         userId,
         type: bookingType,
         reference,
-        status: BookingStatus.DRAFT,
+        status: 'DRAFT' as BookingStatus,
         paymentIntentId,
         totalAmount: cart.totalPrice,
         currency: cart.currency,
@@ -153,7 +153,7 @@ export class BookingService {
       const booking = await prisma.bookingData.update({
         where: { reference },
         data: {
-          status: BookingStatus.PENDING_PAYMENT,
+          status: 'PENDING_PAYMENT' as BookingStatus,
           updatedAt: new Date(),
         },
       });
@@ -188,12 +188,12 @@ export class BookingService {
       }
 
       // Check if booking can be confirmed
-      if (booking.status === BookingStatus.CONFIRMED) {
+      if (booking.status === 'CONFIRMED' as BookingStatus) {
         console.log(`[BookingService] Booking ${reference} already confirmed (idempotency)`);
         return booking;
       }
 
-      if (booking.status !== BookingStatus.PENDING_PAYMENT && booking.status !== BookingStatus.DRAFT) {
+      if (booking.status !== 'PENDING_PAYMENT' as BookingStatus && booking.status !== 'DRAFT' as BookingStatus) {
         throw new Error(`Booking ${reference} cannot be confirmed (current status: ${booking.status})`);
       }
 
@@ -201,7 +201,7 @@ export class BookingService {
       const updatedBooking = await prisma.bookingData.update({
         where: { reference },
         data: {
-          status: BookingStatus.CONFIRMED,
+          status: 'CONFIRMED' as BookingStatus,
           confirmedAt: new Date(),
           updatedAt: new Date(),
         },
@@ -267,7 +267,7 @@ export class BookingService {
       }
 
       // Check if booking is already failed
-      if (booking.status === BookingStatus.FAILED) {
+      if (booking.status === 'FAILED' as BookingStatus) {
         console.log(`[BookingService] Booking ${reference} already failed (idempotency)`);
         return booking;
       }
@@ -276,7 +276,7 @@ export class BookingService {
       const updatedBooking = await prisma.bookingData.update({
         where: { reference },
         data: {
-          status: BookingStatus.FAILED,
+          status: 'FAILED' as BookingStatus,
           data: {
             ...(booking.data as object),
             failureReason: reason,
@@ -317,7 +317,7 @@ export class BookingService {
       }
 
       // Check if booking is already cancelled
-      if (booking.status === BookingStatus.CANCELLED) {
+      if (booking.status === 'CANCELLED' as BookingStatus) {
         console.log(`[BookingService] Booking ${reference} already cancelled (idempotency)`);
         return booking;
       }
@@ -326,7 +326,7 @@ export class BookingService {
       const updatedBooking = await prisma.bookingData.update({
         where: { reference },
         data: {
-          status: BookingStatus.CANCELLED,
+          status: 'CANCELLED' as BookingStatus,
           data: {
             ...(booking.data as object),
             cancellationReason: reason || 'User cancelled',
