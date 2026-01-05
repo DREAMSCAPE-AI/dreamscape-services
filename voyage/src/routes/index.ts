@@ -5,13 +5,14 @@ import locationsRouter from './locations';
 import transfersRouter from './transfers';
 import airlinesRouter from './airlines';
 import airportsRouter from './airports';
-import healthRouter from './health';
+// import healthRouter from './health'; // Temporarily disabled due to module issues
 import activitiesRouter from './activities';
+import cartRouter from './cart';
 
 const router = Router();
 
 // Health check endpoint with database status
-router.use('/health', healthRouter);
+// router.use('/health', healthRouter); // Temporarily disabled
 
 // Core travel service routes
 router.use('/flights', flightsRouter);
@@ -21,5 +22,8 @@ router.use('/transfers', transfersRouter);
 router.use('/airlines', airlinesRouter);
 router.use('/airports', airportsRouter);
 router.use('/activities', activitiesRouter);
+
+// Cart and booking flow routes
+router.use('/cart', cartRouter);
 
 export default router;

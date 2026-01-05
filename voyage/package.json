@@ -23,6 +23,7 @@
     "lint:fix": "eslint src --ext .ts,.js --fix"
   },
   "dependencies": {
+    "@dreamscape/db": "file:../db",
     "@dreamscape/kafka": "file:../shared/kafka",
     "@prisma/client": "^5.7.1",
     "axios": "^1.6.2",

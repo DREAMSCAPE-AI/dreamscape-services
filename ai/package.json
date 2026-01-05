@@ -21,6 +21,7 @@
     "db:seed": "tsx src/database/seed.ts"
   },
   "dependencies": {
+    "@dreamscape/db": "file:../db",
     "@dreamscape/kafka": "file:../shared/kafka",
     "@prisma/client": "^5.7.1",
     "axios": "^1.6.2",

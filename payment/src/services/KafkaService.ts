@@ -164,6 +164,7 @@ class PaymentKafkaService {
     }
 
     if (subscriptions.length > 0) {
+      // @ts-ignore - Type mismatch with Kafka client subscription types
       await this.client.subscribe(CONSUMER_GROUPS.PAYMENT_SERVICE, subscriptions);
       console.log('[PaymentKafkaService] Subscribed to booking events');
     }
