@@ -14,7 +14,7 @@ model User {
   id            String   @id @default(uuid())
   email         String   @unique
   username      String?  @unique
-  password      String
+  password      String   // Hash bcrypt seulement (pas chiffré)
   firstName     String?
   lastName      String?
   phoneNumber   String?
@@ -25,7 +25,16 @@ model User {
   role          Role     @default(USER)
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
-  
+
+  // Colonnes chiffrées (nouvelles - CORE-009.1)
+  firstNameEncrypted    String?
+  lastNameEncrypted     String?
+  emailEncrypted        String? // Email aussi chiffré pour conformité RGPD
+  phoneEncrypted        String?
+  dateOfBirthEncrypted  String?
+  addressEncrypted      String?
+  ssnEncrypted          String? // Social Security Number
+
   // Relations
   profile   UserProfile?
   behaviors UserBehavior[]
@@ -34,7 +43,7 @@ model User {
   searches      SearchHistory[]
   preferences   UserPreferences?
   settings      UserSettings?
-  
+
   @@map("users")
 }
 
@@ -156,7 +165,36 @@ model BookingData {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // Colonnes chiffrées (nouvelles - CORE-009.1)
+  passengerNotesEncrypted   String? // Notes sensibles passagers
+  specialRequestsEncrypted  String? // Demandes spéciales
+
   @@map("booking_data")
+}
+
+// ========== PAYMENT SERVICE MODELS (CORE-009.1 - PCI-DSS) ==========
+model Payment {
+  id          String   @id @default(cuid())
+  userId      String
+  bookingId   String?  // Lié à une réservation
+
+  // Métadonnées non-sensibles (non chiffrées)
+  amount      Decimal  @db.Decimal(10, 2)
+  currency    String   @default("EUR")
+  status      PaymentStatus @default(PENDING)
+  method      String?  // "card", "bank_transfer", etc.
+
+  // Données sensibles PCI-DSS (chiffrées)
+  cardNumberEncrypted     String? // Numéro de carte (chiffré)
+  cardCVCEncrypted        String? // CVV/CVC (chiffré)
+  cardHolderEncrypted     String? // Nom du titulaire (chiffré)
+  expiryDateEncrypted     String? // Date d'expiration (chiffré)
+  bankAccountEncrypted    String? // Numéro de compte bancaire (chiffré)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("payments")
 }
 
 model LocationData {
