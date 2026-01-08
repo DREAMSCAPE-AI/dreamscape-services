@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Core travel booking microservice for Dreamscape OTA",
   "main": "dist/server.js",
-  "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
@@ -38,7 +37,8 @@
     "ioredis": "^5.8.2",
     "morgan": "^1.10.0",
     "node-fetch": "^3.3.2",
-    "redis": "^5.10.0"
+    "redis": "^5.10.0",
+    "zod": "^4.3.5"
   },
   "devDependencies": {
     "@types/compression": "^1.7.5",

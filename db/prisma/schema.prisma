@@ -203,6 +203,46 @@ model TravelOnboardingProfile {
 }
 
 // ========== VOYAGE SERVICE MODELS ==========
+model Itinerary {
+  id           String          @id @default(uuid())
+  userId       String
+  title        String
+  startDate    DateTime
+  endDate      DateTime
+  destinations String[]        @default([])
+  aiGenerated  Boolean         @default(false) // Pour future intégration IA
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  // Relations
+  items ItineraryItem[]
+
+  @@map("itineraries")
+}
+
+model ItineraryItem {
+  id          String            @id @default(uuid())
+  itineraryId String
+  itinerary   Itinerary         @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+  type        ItineraryItemType
+  title       String
+  description String?
+  startDate   DateTime
+  endDate     DateTime
+  location    String
+  details     Json? // Flexible: flight details, hotel info, activity specifics
+  order       Int               @default(0) // Pour drag-n-drop
+  createdAt   DateTime          @default(now())
+
+  @@map("itinerary_items")
+}
+
+enum ItineraryItemType {
+  FLIGHT
+  HOTEL
+  ACTIVITY
+}
+
 model FlightData {
   id            String   @id @default(cuid())
   flightNumber  String
