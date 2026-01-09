@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { ItineraryController } from '@/controllers/itinerary.controller';
-import { authProxy } from '@/middleware/authProxy';
+import { authenticateToken } from '@/middleware/authProxy';
 
 const router = Router();
 const controller = new ItineraryController();
 
 // All routes require authentication
-router.use(authProxy);
+router.use(authenticateToken);
 
 // Itinerary CRUD
 router.get('/', (req, res, next) => controller.getItineraries(req, res, next));

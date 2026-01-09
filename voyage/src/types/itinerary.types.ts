@@ -35,12 +35,22 @@ export const UpdateItinerarySchema = z.object({
 
 export const CreateItineraryItemSchema = z.object({
   type: z.nativeEnum(ItineraryItemType),
+
+  // Cart compatibility fields
+  itemId: z.string().optional(), // External ID (Amadeus offer ID, etc.)
+  itemData: z.record(z.any()), // Full cart-compatible data
+  price: z.number().positive(),
+  currency: z.string().default('USD'),
+  quantity: z.number().int().positive().default(1),
+
+  // Display fields (derived from itemData)
   title: z.string().min(1, 'Title is required').max(200),
   description: z.string().max(1000).optional(),
   startDate: z.string().datetime().or(z.date()),
   endDate: z.string().datetime().or(z.date()),
   location: z.string().min(1, 'Location is required'),
-  details: z.record(z.any()).optional(), // Flexible JSON
+
+  // UI fields
   order: z.number().int().min(0).default(0)
 }).refine(
   (data) => new Date(data.endDate) >= new Date(data.startDate),
@@ -88,12 +98,22 @@ export interface ItineraryItemResponse {
   id: string;
   itineraryId: string;
   type: ItineraryItemType;
+
+  // Cart compatibility fields
+  itemId: string | null;
+  itemData: Record<string, any>;
+  price: number;
+  currency: string;
+  quantity: number;
+
+  // Display fields
   title: string;
   description: string | null;
   startDate: Date;
   endDate: Date;
   location: string;
-  details: Record<string, any> | null;
+
+  // UI fields
   order: number;
   createdAt: Date;
 }

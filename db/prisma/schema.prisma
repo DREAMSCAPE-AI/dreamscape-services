@@ -225,12 +225,22 @@ model ItineraryItem {
   itineraryId String
   itinerary   Itinerary         @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
   type        ItineraryItemType
+
+  // Cart compatibility fields
+  itemId      String?           // External ID (Amadeus offer ID, booking reference, etc.)
+  itemData    Json              // Full cart-compatible data (FlightItemData | HotelItemData | ActivityItemData)
+  price       Decimal           @db.Decimal(10, 2)
+  currency    String            @default("USD")
+  quantity    Int               @default(1)
+
+  // Display fields (derived from itemData for quick access)
   title       String
   description String?
   startDate   DateTime
   endDate     DateTime
   location    String
-  details     Json? // Flexible: flight details, hotel info, activity specifics
+
+  // UI fields
   order       Int               @default(0) // Pour drag-n-drop
   createdAt   DateTime          @default(now())
 
