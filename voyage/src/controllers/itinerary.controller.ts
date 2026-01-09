@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '@/database/prisma';
+import { ZodError } from 'zod';
 import {
   CreateItinerarySchema,
   UpdateItinerarySchema,
@@ -110,8 +111,8 @@ export class ItineraryController {
 
       res.status(201).json(itinerary);
     } catch (error) {
-      if (error instanceof Error && error.name === 'ZodError') {
-        res.status(400).json({ error: 'Validation error', details: error });
+      if (error instanceof ZodError) {
+        res.status(400).json({ error: 'Validation error', details: error.issues });
         return;
       }
       next(error);
@@ -161,8 +162,8 @@ export class ItineraryController {
 
       res.json(itinerary);
     } catch (error) {
-      if (error instanceof Error && error.name === 'ZodError') {
-        res.status(400).json({ error: 'Validation error', details: error });
+      if (error instanceof ZodError) {
+        res.status(400).json({ error: 'Validation error', details: error.issues });
         return;
       }
       next(error);
@@ -225,26 +226,32 @@ export class ItineraryController {
         return;
       }
 
+      console.log('[ItineraryController] Received body:', JSON.stringify(req.body, null, 2));
       const validated = CreateItineraryItemSchema.parse(req.body);
+      console.log('[ItineraryController] Validated data:', JSON.stringify(validated, null, 2));
 
       const item = await prisma.itineraryItem.create({
         data: {
           itineraryId,
           type: validated.type,
+          itemId: validated.itemId || null,
+          itemData: validated.itemData,
+          price: validated.price,
+          currency: validated.currency,
+          quantity: validated.quantity,
           title: validated.title,
           description: validated.description || null,
           startDate: new Date(validated.startDate),
           endDate: new Date(validated.endDate),
           location: validated.location,
-          details: validated.details || null,
           order: validated.order
         }
       });
 
       res.status(201).json(item);
     } catch (error) {
-      if (error instanceof Error && error.name === 'ZodError') {
-        res.status(400).json({ error: 'Validation error', details: error });
+      if (error instanceof ZodError) {
+        res.status(400).json({ error: 'Validation error', details: error.issues });
         return;
       }
       next(error);
@@ -278,12 +285,16 @@ export class ItineraryController {
 
       const updateData: any = {};
       if (validated.type !== undefined) updateData.type = validated.type;
+      if (validated.itemId !== undefined) updateData.itemId = validated.itemId;
+      if (validated.itemData !== undefined) updateData.itemData = validated.itemData;
+      if (validated.price !== undefined) updateData.price = validated.price;
+      if (validated.currency !== undefined) updateData.currency = validated.currency;
+      if (validated.quantity !== undefined) updateData.quantity = validated.quantity;
       if (validated.title !== undefined) updateData.title = validated.title;
       if (validated.description !== undefined) updateData.description = validated.description;
       if (validated.startDate !== undefined) updateData.startDate = new Date(validated.startDate);
       if (validated.endDate !== undefined) updateData.endDate = new Date(validated.endDate);
       if (validated.location !== undefined) updateData.location = validated.location;
-      if (validated.details !== undefined) updateData.details = validated.details;
       if (validated.order !== undefined) updateData.order = validated.order;
 
       const item = await prisma.itineraryItem.update({
@@ -293,8 +304,8 @@ export class ItineraryController {
 
       res.json(item);
     } catch (error) {
-      if (error instanceof Error && error.name === 'ZodError') {
-        res.status(400).json({ error: 'Validation error', details: error });
+      if (error instanceof ZodError) {
+        res.status(400).json({ error: 'Validation error', details: error.issues });
         return;
       }
       next(error);
@@ -371,8 +382,8 @@ export class ItineraryController {
 
       res.status(204).send();
     } catch (error) {
-      if (error instanceof Error && error.name === 'ZodError') {
-        res.status(400).json({ error: 'Validation error', details: error });
+      if (error instanceof ZodError) {
+        res.status(400).json({ error: 'Validation error', details: error.issues });
         return;
       }
       next(error);
@@ -445,8 +456,8 @@ export class ItineraryController {
           res.status(400).json({ error: 'Invalid export format' });
       }
     } catch (error) {
-      if (error instanceof Error && error.name === 'ZodError') {
-        res.status(400).json({ error: 'Invalid export format' });
+      if (error instanceof ZodError) {
+        res.status(400).json({ error: 'Invalid export format', details: error.issues });
         return;
       }
       next(error);
