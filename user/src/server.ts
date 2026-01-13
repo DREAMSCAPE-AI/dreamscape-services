@@ -11,6 +11,7 @@ import profileRoutes from './routes/profile';
 import healthRoutes from './routes/health';
 import onboardingRoutes from '@routes/onboarding';
 import aiIntegrationRoutes from '@routes/aiIntegration';
+import historyRoutes from '@routes/history';
 import { apiLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/errorHandler';
 import { userKafkaService } from './services/KafkaService';
@@ -43,6 +44,7 @@ app.use('/uploads', express.static('uploads'));
 // app.use('/api/v1/activities', activitiesRoutes); // TODO: Fix AmadeusService import
 app.use('/api/v1/users/profile', profileRoutes);
 app.use('/api/v1/users/onboarding', onboardingRoutes);
+app.use('/api/v1/users/history', historyRoutes);
 app.use('/api/v1/ai', aiIntegrationRoutes);
 
 // Health check routes - INFRA-013.1
