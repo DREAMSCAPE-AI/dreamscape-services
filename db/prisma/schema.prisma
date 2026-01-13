@@ -35,6 +35,7 @@ model User {
   preferences      UserPreferences?
   settings         UserSettings?
   travelOnboarding TravelOnboardingProfile?
+  favorites        Favorite[]
 
   // Onboarding status
   onboardingCompleted   Boolean   @default(false)
@@ -202,6 +203,28 @@ model TravelOnboardingProfile {
   @@map("travel_onboarding_profiles")
 }
 
+model Favorite {
+  id          String       @id @default(uuid())
+  userId      String
+  entityType  FavoriteType
+  entityId    String       // Reference to external entity (flight ID, hotel ID, etc.)
+  entityData  Json?        // Cached data for offline/quick display
+  category    String?      // Optional user-defined category for organization
+  notes       String?      // Optional user notes
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Indexes for performance
+  @@unique([userId, entityType, entityId]) // Prevent duplicate favorites
+  @@index([userId, createdAt(sort: Desc)]) // List user favorites chronologically
+  @@index([userId, entityType]) // Filter by category
+  @@index([userId, entityId]) // Check if specific item is favorited
+  @@map("favorites")
+}
+
 // ========== VOYAGE SERVICE MODELS ==========
 model FlightData {
   id            String   @id @default(cuid())
@@ -343,6 +366,14 @@ model SearchHistory {
 }
 
 // ========== ENUMS ==========
+enum FavoriteType {
+  FLIGHT
+  HOTEL
+  ACTIVITY
+  DESTINATION
+  BOOKING
+}
+
 enum BookingType {
   FLIGHT
   HOTEL
