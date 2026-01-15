@@ -337,6 +337,10 @@ router.post('/checkout', async (req: Request, res: Response): Promise<void> => {
     };
 
     try {
+      // Create AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
       const paymentResponse = await fetch(`${PAYMENT_SERVICE_URL}/api/v1/payment/create-intent`, {
         method: 'POST',
         headers: {
@@ -350,7 +354,10 @@ router.post('/checkout', async (req: Request, res: Response): Promise<void> => {
           userId,
           metadata: req.body.metadata || {},
         }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!paymentResponse.ok) {
         throw new Error(`Payment service error: ${paymentResponse.statusText}`);
@@ -360,11 +367,19 @@ router.post('/checkout', async (req: Request, res: Response): Promise<void> => {
       paymentIntent = paymentData.data;
 
       console.log(`✅ [CartRoutes] Payment Intent created: ${paymentIntent.paymentIntentId}`);
-    } catch (paymentError) {
+    } catch (paymentError: any) {
       console.error('[CartRoutes] Failed to create payment intent:', paymentError);
-      res.status(500).json({
+
+      // Check if it's a timeout/connection error
+      const isConnectionError = paymentError.name === 'AbortError' ||
+                                paymentError.code === 'ECONNREFUSED' ||
+                                paymentError.cause?.code === 'ECONNREFUSED';
+
+      res.status(503).json({
         error: 'Failed to initialize payment',
-        message: paymentError instanceof Error ? paymentError.message : 'Payment service unavailable'
+        message: isConnectionError
+          ? 'Payment service is not available. Please ensure the payment service is running on port 3004.'
+          : (paymentError instanceof Error ? paymentError.message : 'Payment service unavailable')
       });
       return;
     }

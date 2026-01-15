@@ -116,13 +116,9 @@ export class CartService {
         const existingItem = cart.items.find((item) => item.itemId === itemId && item.type === type);
 
         if (existingItem) {
-          // Update quantity
-          await prisma.cartItem.update({
-            where: { id: existingItem.id },
-            data: {
-              quantity: existingItem.quantity + quantity,
-            },
-          });
+          // Item already exists in cart - don't add duplicate, just return current cart
+          console.log(`[CartService] Item ${itemId} already in cart, skipping duplicate`);
+          return cart;
         } else {
           // Add new item
           await prisma.cartItem.create({
