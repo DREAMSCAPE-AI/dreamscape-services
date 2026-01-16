@@ -12,6 +12,8 @@ import type {
 } from '../types/payment';
 import stripeService from './StripeService';
 import paymentKafkaService from './KafkaService';
+import databaseService from './DatabaseService';
+import { PaymentTransactionStatus } from '@dreamscape/db';
 
 class PaymentService {
   /**
@@ -27,16 +29,16 @@ class PaymentService {
       // Create payment intent via Stripe
       const paymentIntent = await stripeService.createPaymentIntent(request);
 
-      // TODO: Store payment record in database
-      // await this.createPaymentRecord({
-      //   paymentIntentId: paymentIntent.paymentIntentId,
-      //   bookingId: request.bookingId,
-      //   bookingReference: request.bookingReference,
-      //   userId: request.userId,
-      //   amount: request.amount,
-      //   currency: request.currency,
-      //   status: 'pending',
-      // });
+      // Store payment record in database
+      await databaseService.createTransaction({
+        paymentIntentId: paymentIntent.paymentIntentId,
+        bookingId: request.bookingId,
+        bookingReference: request.bookingReference,
+        userId: request.userId,
+        amount: request.amount / 100, // Convert cents to currency units for storage
+        currency: request.currency,
+        metadata: request.metadata,
+      });
 
       console.log(`✅ [PaymentService] Payment intent created: ${paymentIntent.paymentIntentId}`);
 
@@ -66,11 +68,12 @@ class PaymentService {
         throw new Error(`Missing metadata in payment intent ${paymentIntentId}`);
       }
 
-      // TODO: Update payment record in database to 'succeeded'
-      // await this.updatePaymentStatus(paymentIntentId, 'succeeded', {
-      //   confirmedAt: new Date(),
-      //   paymentMethod: paymentIntent.payment_method as string,
-      // });
+      // Update payment record in database to 'succeeded'
+      await databaseService.updateTransaction(paymentIntentId, {
+        status: PaymentTransactionStatus.SUCCEEDED,
+        confirmedAt: new Date(),
+        paymentMethod: paymentIntent.payment_method as string,
+      });
 
       // Publish payment.completed Kafka event
       try {
@@ -118,10 +121,12 @@ class PaymentService {
 
       const errorMessage = failureReason || paymentIntent.last_payment_error?.message || 'Payment failed';
 
-      // TODO: Update payment record in database to 'failed'
-      // await this.updatePaymentStatus(paymentIntentId, 'failed', {
-      //   failureReason: errorMessage,
-      // });
+      // Update payment record in database to 'failed'
+      await databaseService.updateTransaction(paymentIntentId, {
+        status: PaymentTransactionStatus.FAILED,
+        failedAt: new Date(),
+        failureReason: errorMessage,
+      });
 
       // Publish payment.failed Kafka event
       try {
@@ -167,12 +172,63 @@ class PaymentService {
         throw new Error(`Missing metadata in payment intent ${paymentIntentId}`);
       }
 
-      // TODO: Update payment record in database to 'canceled'
-      // await this.updatePaymentStatus(paymentIntentId, 'canceled');
+      // Update payment record in database to 'canceled'
+      await databaseService.updateTransaction(paymentIntentId, {
+        status: PaymentTransactionStatus.CANCELED,
+      });
 
       console.log(`🚫 [PaymentService] Payment ${paymentIntentId} canceled`);
     } catch (error) {
       console.error(`[PaymentService] Error handling payment cancellation:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle refunded payment
+   * Called from webhook when a charge is refunded
+   */
+  async handlePaymentRefunded(paymentIntentId: string): Promise<void> {
+    try {
+      console.log(`[PaymentService] Processing refunded payment: ${paymentIntentId}`);
+
+      // Get payment intent details from Stripe
+      const paymentIntent = await stripeService.getPaymentIntent(paymentIntentId);
+
+      const bookingId = paymentIntent.metadata.bookingId;
+      const bookingReference = paymentIntent.metadata.bookingReference;
+      const userId = paymentIntent.metadata.userId;
+
+      if (!bookingId || !bookingReference || !userId) {
+        throw new Error(`Missing metadata in payment intent ${paymentIntentId}`);
+      }
+
+      // Update payment record in database to 'refunded'
+      await databaseService.updateTransaction(paymentIntentId, {
+        status: PaymentTransactionStatus.REFUNDED,
+        refundedAt: new Date(),
+      });
+
+      // Publish payment.refunded Kafka event
+      try {
+        await paymentKafkaService.publishPaymentRefunded({
+          paymentId: paymentIntentId,
+          bookingId,
+          bookingReference,
+          userId,
+          amount: paymentIntent.amount / 100,
+          currency: paymentIntent.currency.toUpperCase(),
+          refundedAt: new Date().toISOString(),
+        } as any);
+
+        console.log(`📨 [PaymentService] Published payment.refunded event for ${bookingReference}`);
+      } catch (kafkaError) {
+        console.error(`⚠️ [PaymentService] Failed to publish payment.refunded event:`, kafkaError);
+      }
+
+      console.log(`✅ [PaymentService] Payment ${paymentIntentId} refunded successfully`);
+    } catch (error) {
+      console.error(`[PaymentService] Error handling payment refund:`, error);
       throw error;
     }
   }
@@ -187,22 +243,26 @@ class PaymentService {
       // Create refund in Stripe
       const refund = await stripeService.createRefund(request);
 
-      // TODO: Update payment record in database
-      // await this.updatePaymentStatus(request.paymentIntentId, 'refunded', {
-      //   refundedAt: new Date(),
-      // });
+      // Update payment record in database
+      await databaseService.updateTransaction(request.paymentIntentId, {
+        status: PaymentTransactionStatus.REFUNDED,
+        refundedAt: new Date(),
+      });
 
-      // TODO: Publish payment.refunded Kafka event
-      // await paymentKafkaService.publishPaymentRefunded({
-      //   refundId: refund.refundId,
-      //   paymentId: request.paymentIntentId,
-      //   bookingId: request.bookingId,
-      //   userId: request.userId,
-      //   amount: refund.amount / 100,
-      //   currency: refund.currency.toUpperCase(),
-      //   reason: refund.reason,
-      //   refundedAt: new Date().toISOString(),
-      // });
+      // Publish payment.refunded Kafka event
+      try {
+        await paymentKafkaService.publishPaymentRefunded({
+          paymentId: request.paymentIntentId,
+          bookingId: request.bookingId,
+          bookingReference: '', // Will be fetched from DB if needed
+          userId: request.userId,
+          amount: refund.amount / 100,
+          currency: refund.currency.toUpperCase(),
+          refundedAt: new Date().toISOString(),
+        } as any);
+      } catch (kafkaError) {
+        console.error(`⚠️ [PaymentService] Failed to publish payment.refunded event:`, kafkaError);
+      }
 
       console.log(`✅ [PaymentService] Refund processed: ${refund.refundId}`);
 
@@ -222,8 +282,10 @@ class PaymentService {
 
       await stripeService.cancelPaymentIntent(paymentIntentId);
 
-      // TODO: Update payment record in database
-      // await this.updatePaymentStatus(paymentIntentId, 'canceled');
+      // Update payment record in database
+      await databaseService.updateTransaction(paymentIntentId, {
+        status: PaymentTransactionStatus.CANCELED,
+      });
 
       console.log(`✅ [PaymentService] Payment intent canceled: ${paymentIntentId}`);
     } catch (error) {

@@ -103,8 +103,16 @@ router.post('/webhook', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Get raw body (should be set by middleware)
-    const payload = (req as any).rawBody || req.body;
+    // Get raw body as Buffer (set by express.raw() middleware)
+    const payload = req.body;
+
+    if (!Buffer.isBuffer(payload)) {
+      res.status(400).json({
+        error: 'Invalid request body',
+        message: 'Webhook endpoint expects raw body',
+      });
+      return;
+    }
 
     // Process webhook
     const result = await webhookService.processWebhook(payload, signature as string);

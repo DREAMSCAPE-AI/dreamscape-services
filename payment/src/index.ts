@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import paymentKafkaService from './services/KafkaService';
 import stripeService from './services/StripeService';
+import databaseService from './services/DatabaseService';
 import paymentRoutes from './routes/payment';
 import { rawBodyMiddleware } from './middleware/rawBody';
 
@@ -19,17 +20,19 @@ app.use(cors({
 }));
 
 // Raw body middleware for webhooks (must be BEFORE express.json())
-app.use(rawBodyMiddleware);
+// Use express.raw() for webhook endpoint to preserve raw body
+app.use('/api/v1/payment/webhook', express.raw({ type: 'application/json' }));
 
-// JSON body parser
+// JSON body parser for all other endpoints
 app.use(express.json());
 
 // Health check endpoint
 app.get('/health', async (req, res) => {
   const kafkaHealth = await paymentKafkaService.healthCheck();
   const stripeHealth = await stripeService.healthCheck();
+  const databaseHealth = await databaseService.healthCheck();
 
-  const healthy = kafkaHealth.healthy && stripeHealth.healthy;
+  const healthy = kafkaHealth.healthy && stripeHealth.healthy && databaseHealth.healthy;
 
   res.status(healthy ? 200 : 503).json({
     status: healthy ? 'ok' : 'degraded',
@@ -38,6 +41,7 @@ app.get('/health', async (req, res) => {
     checks: {
       kafka: kafkaHealth,
       stripe: stripeHealth,
+      database: databaseHealth,
     },
   });
 });
@@ -60,6 +64,16 @@ app.use('/api/v1/payment', paymentRoutes);
 
 const startServer = async () => {
   try {
+    // Initialize Database (PostgreSQL with Prisma)
+    try {
+      await databaseService.initialize();
+      console.log('✅ Database initialized successfully');
+    } catch (error) {
+      console.error('❌ Database initialization failed:', error);
+      console.error('💥 Cannot start payment service without database');
+      process.exit(1);
+    }
+
     // Initialize Stripe
     try {
       stripeService.initialize();
@@ -86,6 +100,10 @@ const startServer = async () => {
         // Disconnect Kafka - DR-378 / DR-379
         await paymentKafkaService.shutdown();
         console.log('✅ Kafka disconnected');
+
+        // Disconnect Database
+        await databaseService.shutdown();
+        console.log('✅ Database disconnected');
 
         process.exit(0);
       } catch (error) {
