@@ -5,12 +5,14 @@
  * - Handle payment confirmation
  */
 
-import type { BookingData } from '@prisma/client';
 import prisma from '../database/prisma';
 import CartService from './CartService';
 import { Decimal } from '@prisma/client/runtime/library';
 import voyageKafkaService from './KafkaService';
 import type { VoyageBookingCreatedPayload, VoyageBookingConfirmedPayload } from '@dreamscape/kafka';
+
+// Inferred Prisma types
+type BookingData = NonNullable<Awaited<ReturnType<typeof prisma.bookingData.findUnique>>>;
 
 // Booking status types (matching Prisma enum)
 type BookingStatus = 'DRAFT' | 'PENDING_PAYMENT' | 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED' | 'FAILED';

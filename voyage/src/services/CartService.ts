@@ -6,7 +6,6 @@
  * - Price calculation
  */
 
-import type { CartData as PrismaCartData, CartItem } from '@prisma/client';
 import prisma from '../database/prisma';
 import RedisClient from '../config/redis';
 import { Decimal } from '@prisma/client/runtime/library';
@@ -17,10 +16,11 @@ const CART_REDIS_PREFIX = 'cart:';
 // Cart item types (matching Prisma enum)
 type CartItemType = 'FLIGHT' | 'HOTEL' | 'ACTIVITY';
 
-// CartData with items relation
-type CartData = PrismaCartData & {
-  items: CartItem[];
+// Inferred Prisma types
+type CartData = NonNullable<Awaited<ReturnType<typeof prisma.cartData.findUnique>>> & {
+  items: NonNullable<Awaited<ReturnType<typeof prisma.cartItem.findMany>>>;
 };
+type CartItem = NonNullable<Awaited<ReturnType<typeof prisma.cartItem.findUnique>>>;
 
 interface AddToCartDTO {
   userId: string;
