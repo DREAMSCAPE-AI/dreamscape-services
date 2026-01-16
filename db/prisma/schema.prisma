@@ -204,15 +204,15 @@ model TravelOnboardingProfile {
 
 // ========== VOYAGE SERVICE MODELS ==========
 model Itinerary {
-  id           String          @id @default(uuid())
+  id           String   @id @default(uuid())
   userId       String
   title        String
   startDate    DateTime
   endDate      DateTime
-  destinations String[]        @default([])
-  aiGenerated  Boolean         @default(false) // Pour future intégration IA
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  destinations String[] @default([])
+  aiGenerated  Boolean  @default(false) // Pour future intégration IA
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // Relations
   items ItineraryItem[]
@@ -227,11 +227,11 @@ model ItineraryItem {
   type        ItineraryItemType
 
   // Cart compatibility fields
-  itemId      String?           // External ID (Amadeus offer ID, booking reference, etc.)
-  itemData    Json              // Full cart-compatible data (FlightItemData | HotelItemData | ActivityItemData)
-  price       Decimal           @db.Decimal(10, 2)
-  currency    String            @default("USD")
-  quantity    Int               @default(1)
+  itemId   String? // External ID (Amadeus offer ID, booking reference, etc.)
+  itemData Json // Full cart-compatible data (FlightItemData | HotelItemData | ActivityItemData)
+  price    Decimal @db.Decimal(10, 2)
+  currency String  @default("USD")
+  quantity Int     @default(1)
 
   // Display fields (derived from itemData for quick access)
   title       String
@@ -241,8 +241,8 @@ model ItineraryItem {
   location    String
 
   // UI fields
-  order       Int               @default(0) // Pour drag-n-drop
-  createdAt   DateTime          @default(now())
+  order     Int      @default(0) // Pour drag-n-drop
+  createdAt DateTime @default(now())
 
   @@map("itinerary_items")
 }
@@ -523,4 +523,64 @@ enum RiskTolerance {
   CONSERVATIVE
   MODERATE
   ADVENTUROUS
+}
+
+// ========== PAYMENT SERVICE MODELS ==========
+model PaymentTransaction {
+  id               String @id @default(uuid())
+  paymentIntentId  String @unique
+  bookingId        String
+  bookingReference String
+  userId           String
+
+  // Payment details
+  amount   Decimal                  @db.Decimal(10, 2)
+  currency String
+  status   PaymentTransactionStatus
+
+  // Stripe details
+  paymentMethod    String?
+  stripeCustomerId String?
+
+  // Timestamps
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  confirmedAt DateTime?
+  failedAt    DateTime?
+  refundedAt  DateTime?
+
+  // Failure details
+  failureReason String?
+
+  // Metadata
+  metadata Json?
+
+  @@index([bookingId])
+  @@index([userId])
+  @@index([status])
+  @@map("payment_transactions")
+}
+
+model ProcessedWebhookEvent {
+  id          String   @id @default(uuid())
+  eventId     String   @unique // Stripe event ID
+  eventType   String
+  processed   Boolean  @default(true)
+  processedAt DateTime @default(now())
+
+  // Metadata for debugging
+  payload Json?
+
+  @@index([eventId])
+  @@index([processedAt])
+  @@map("processed_webhook_events")
+}
+
+enum PaymentTransactionStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELED
+  REFUNDED
 }

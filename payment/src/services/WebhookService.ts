@@ -7,6 +7,7 @@ import type Stripe from 'stripe';
 import type { WebhookHandlerResult } from '../types/payment';
 import stripeService from './StripeService';
 import paymentService from './PaymentService';
+import databaseService from './DatabaseService';
 
 class WebhookService {
   /**
@@ -20,6 +21,18 @@ class WebhookService {
       const event = stripeService.constructWebhookEvent(payload, signature);
 
       console.log(`[WebhookService] Received webhook event: ${event.type} (${event.id})`);
+
+      // ========== IDEMPOTENCE CHECK ==========
+      // Check if this event has already been processed
+      const alreadyProcessed = await databaseService.isEventProcessed(event.id);
+
+      if (alreadyProcessed) {
+        console.log(`[WebhookService] Event ${event.id} already processed, skipping`);
+        return {
+          success: true,
+          message: `Webhook event ${event.id} already processed (idempotent)`,
+        };
+      }
 
       // Route to appropriate handler based on event type
       switch (event.type) {
@@ -46,6 +59,12 @@ class WebhookService {
         default:
           console.log(`[WebhookService] Unhandled event type: ${event.type}`);
       }
+
+      // Mark event as processed AFTER successful processing
+      await databaseService.markEventAsProcessed(event.id, event.type, {
+        created: event.created,
+        livemode: event.livemode,
+      });
 
       return {
         success: true,
@@ -108,11 +127,18 @@ class WebhookService {
 
     console.log(`[WebhookService] Charge refunded: ${charge.id}`);
 
-    // TODO: Handle refund notification
-    // This could trigger additional business logic like:
-    // - Notifying the customer
-    // - Updating inventory
-    // - Publishing a refund.completed Kafka event
+    // Get payment intent ID from charge
+    const paymentIntentId = typeof charge.payment_intent === 'string'
+      ? charge.payment_intent
+      : charge.payment_intent?.id;
+
+    if (!paymentIntentId) {
+      console.error(`[WebhookService] No payment intent found for charge ${charge.id}`);
+      return;
+    }
+
+    // Handle refund through PaymentService
+    await paymentService.handlePaymentRefunded(paymentIntentId);
   }
 
   /**
