@@ -1,0 +1,51 @@
+# Dockerfile production pour auth-service
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copier le workspace db (dépendance locale)
+COPY db ./db
+
+# Copier les fichiers du service auth
+COPY auth/package.json auth/tsconfig.json ./auth/
+
+# Installer les dépendances
+WORKDIR /app/auth
+RUN npm install --production=false
+
+# Copier le code source
+COPY auth/src ./src
+COPY auth/prisma ./prisma
+
+# Générer Prisma Client
+RUN npx prisma generate
+
+# Builder le TypeScript
+RUN npm run build
+
+# === Stage de production ===
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Installer dumb-init pour un meilleur signal handling
+RUN apk add --no-cache dumb-init
+
+# Copier les fichiers de build
+COPY --from=builder /app/auth/dist ./dist
+COPY --from=builder /app/auth/node_modules ./node_modules
+COPY --from=builder /app/auth/package.json ./package.json
+
+# Copier le schema Prisma pour les migrations
+COPY --from=builder /app/auth/prisma ./prisma
+
+# Exposer le port
+EXPOSE 3001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s \
+  CMD node -e "require('http').get('http://localhost:3001/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+
+# Lancer avec dumb-init
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "dist/server.js"]

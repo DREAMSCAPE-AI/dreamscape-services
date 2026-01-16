@@ -9,6 +9,12 @@ import routes from '@/routes';
 import { errorHandler, notFoundHandler } from '@/middleware/errorHandler';
 import { apiLimiter } from '@/middleware/rateLimiter';
 import DatabaseService, { type InitializationResult } from '@/database/DatabaseService';
+import redisClient from '@/config/redis';
+import voyageKafkaService from '@/services/KafkaService';
+import {
+  handlePaymentCompleted,
+  handlePaymentFailed,
+} from '@/handlers/paymentEventsHandler';
 
 // Types pour l'application
 interface ServerState {
@@ -29,7 +35,6 @@ interface RootResponse {
   health_endpoint: string;
   databases: {
     postgresql: boolean;
-    mongodb: boolean;
   };
 }
 
@@ -105,7 +110,9 @@ function createApp(): Express {
   // Rate limiting (avant les routes)
   app.use('/api', apiLimiter);
 
-  // API routes
+  // API routes (with /v1 versioning)
+  app.use('/api/v1', routes);
+  // Keep /api for backward compatibility
   app.use('/api', routes);
 
   // Root endpoint avec informations détaillées
@@ -122,8 +129,7 @@ function createApp(): Express {
       environment: config.nodeEnv,
       health_endpoint: `/api/health`,
       databases: {
-        postgresql: readiness.postgresql,
-        mongodb: readiness.mongodb
+        postgresql: readiness.postgresql
       }
     };
 
@@ -166,7 +172,6 @@ async function initializeDatabase(maxRetries: number = 3): Promise<Initializatio
       if (result.success) {
         console.log('✅ Database initialization successful');
         console.log(`📊 PostgreSQL: ${result.postgresql ? '✅' : '❌'}`);
-        console.log(`📊 MongoDB: ${result.mongodb ? '✅' : '⚠️ (optional)'}`);
         return result;
       }
     } catch (error) {
@@ -215,7 +220,22 @@ async function gracefulShutdown(signal: string): Promise<void> {
       });
     }
 
-    // 2. Fermer les connexions de base de données
+    // 2. Fermer la connexion Redis
+    if (redisClient.isReady()) {
+      console.log('🔒 Closing Redis connection...');
+      await redisClient.disconnect();
+      console.log('✅ Redis connection closed');
+    }
+
+    // 2.5. Fermer la connexion Kafka - DR-402 / DR-403
+    try {
+      await voyageKafkaService.shutdown();
+      console.log('✅ Kafka disconnected');
+    } catch (kafkaError) {
+      console.warn('⚠️ Error closing Kafka connection:', kafkaError);
+    }
+
+    // 3. Fermer les connexions de base de données
     if (serverState.dbService) {
       console.log('🔒 Closing database connections...');
       await serverState.dbService.disconnect();
@@ -273,9 +293,33 @@ async function startServer(): Promise<void> {
     // 3. Initialisation de la base de données
     serverState.dbService = DatabaseService.getInstance();
     const dbResult = await initializeDatabase();
-    
+
     if (!dbResult.postgresql) {
       throw new Error('PostgreSQL connection is required for the application to start');
+    }
+
+    // 3.5. Initialisation de Redis (optionnel - pour le cache)
+    try {
+      await redisClient.connect();
+      console.log('✅ Redis connected (cache enabled)');
+    } catch (redisError) {
+      console.warn('⚠️ Redis connection failed - cache disabled, continuing without cache');
+    }
+
+    // 3.6. Initialisation de Kafka - DR-402 / DR-403
+    try {
+      await voyageKafkaService.initialize();
+      console.log('✅ Kafka initialized successfully');
+
+      // Subscribe to payment events for Saga Pattern - DR-391 / DR-392
+      await voyageKafkaService.subscribeToEvents({
+        onPaymentCompleted: handlePaymentCompleted,
+        onPaymentFailed: handlePaymentFailed,
+      });
+      console.log('✅ Subscribed to payment events (Saga Pattern)');
+    } catch (kafkaError) {
+      console.warn('⚠️ Kafka initialization failed (non-critical):', kafkaError);
+      console.warn('⚠️ Service will continue without event publishing');
     }
 
     // 4. Création de l'application Express
@@ -283,16 +327,22 @@ async function startServer(): Promise<void> {
     console.log('✅ Express app created');
 
     // 5. Démarrage du serveur HTTP
-    serverState.server = app.listen(config.port, () => {
+    serverState.server = app.listen(config.port, async () => {
       serverState.isRunning = true;
       serverState.startedAt = new Date();
-      
+
       const startupTime = Date.now() - startTime;
       console.log('\n🎉 Server started successfully!');
       console.log(`🚀 Dreamscape API server running on port ${config.port}`);
       console.log(`🌐 CORS origin: ${config.cors.origin}`);
       console.log(`🔗 Health check: http://localhost:${config.port}/api/health`);
-      console.log(`💾 Databases: PostgreSQL ✅${dbResult.mongodb ? ', MongoDB ✅' : ', MongoDB ⚠️ (optional)'}`);
+      console.log(`💾 Databases: PostgreSQL ✅`);
+      console.log(`🔴 Redis Cache: ${redisClient.isReady() ? '✅ enabled' : '⚠️ disabled'}`);
+
+      // Check Kafka health - DR-402 / DR-403
+      const kafkaHealth = await voyageKafkaService.healthCheck();
+      console.log(`📨 Kafka: ${kafkaHealth.healthy ? '✅ Connected' : '⚠️ Not available'}`);
+
       console.log(`⏱️  Startup time: ${startupTime}ms`);
       console.log(`🆔 Process ID: ${process.pid}`);
       console.log('📊 Server ready to accept connections\n');

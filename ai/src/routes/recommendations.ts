@@ -1,30 +1,258 @@
 import { Router, Request, Response } from 'express';
-import AmadeusService from '@/services/AmadeusService';
 
 const router = Router();
 
-// Travel Recommendations
-router.get('/', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { cityCodes, travelerCountryCode, destinationCountryCode } = req.query;
+/**
+ * DR-204: API endpoints for VR activity recommendations
+ * Provides personalized, trending, and deals recommendations for VR integration
+ */
 
-    if (!cityCodes) {
-      res.status(400).json({
-        error: 'Missing required parameter: cityCodes'
-      });
-      return;
+// Mock data for activity recommendations
+// TODO: Replace with real AI-powered recommendations from database
+const getMockRecommendations = (type: 'personalized' | 'trending' | 'deals' = 'personalized') => {
+  const baseRecommendations = [
+    {
+      id: 'rec-1',
+      type: 'activity',
+      title: 'Croisière sur la Seine',
+      description: 'Vue panoramique de Paris depuis l\'eau avec dîner romantique',
+      location: 'Paris, France',
+      coordinates: { lat: 48.8566, lon: 2.3522 },
+      price: 89,
+      currency: '€',
+      rating: 4.8,
+      reviewCount: 1245,
+      image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34',
+      tags: ['romantic', 'sightseeing', 'dinner'],
+      confidence: 0.92,
+      duration: '2 hours',
+      category: 'cruise'
+    },
+    {
+      id: 'rec-2',
+      type: 'destination',
+      title: 'Tour Eiffel & Musée du Louvre',
+      description: 'Pack découverte des monuments emblématiques de Paris',
+      location: 'Paris, France',
+      coordinates: { lat: 48.8584, lon: 2.2945 },
+      price: 135,
+      currency: '€',
+      rating: 4.9,
+      reviewCount: 3421,
+      image: 'https://images.unsplash.com/photo-1511739001486-6bfe10ce785f',
+      tags: ['culture', 'architecture', 'history'],
+      confidence: 0.95,
+      duration: '1 day',
+      category: 'landmark'
+    },
+    {
+      id: 'rec-3',
+      type: 'activity',
+      title: 'Visite guidée du quartier gothique',
+      description: 'Explorez les ruelles médiévales de Barcelone',
+      location: 'Barcelona, Spain',
+      coordinates: { lat: 41.3851, lon: 2.1734 },
+      price: 45,
+      currency: '€',
+      rating: 4.7,
+      reviewCount: 892,
+      image: 'https://images.unsplash.com/photo-1562883676-8c7feb83f09b',
+      tags: ['history', 'walking-tour', 'culture'],
+      confidence: 0.88,
+      duration: '3 hours',
+      category: 'tour'
+    },
+    {
+      id: 'rec-4',
+      type: 'activity',
+      title: 'Cours de cuisine catalane',
+      description: 'Apprenez à préparer des tapas authentiques avec un chef local',
+      location: 'Barcelona, Spain',
+      coordinates: { lat: 41.3874, lon: 2.1686 },
+      price: 75,
+      currency: '€',
+      rating: 4.9,
+      reviewCount: 567,
+      image: 'https://images.unsplash.com/photo-1556910103-1c02745aae4d',
+      tags: ['food', 'cooking', 'local-experience'],
+      confidence: 0.85,
+      duration: '4 hours',
+      category: 'culinary'
+    },
+    {
+      id: 'rec-5',
+      type: 'destination',
+      title: 'Sagrada Familia & Park Güell',
+      description: 'Découvrez les chefs-d\'œuvre de Gaudí',
+      location: 'Barcelona, Spain',
+      coordinates: { lat: 41.4036, lon: 2.1744 },
+      price: 95,
+      currency: '€',
+      rating: 5.0,
+      reviewCount: 4523,
+      image: 'https://images.unsplash.com/photo-1583422409516-2895a77efded',
+      tags: ['architecture', 'art', 'gaudi'],
+      confidence: 0.98,
+      duration: '1 day',
+      category: 'landmark'
+    },
+    {
+      id: 'rec-6',
+      type: 'activity',
+      title: 'Vélo électrique au bord de la plage',
+      description: 'Tour guidé le long de la côte barcelonaise',
+      location: 'Barcelona, Spain',
+      coordinates: { lat: 41.3808, lon: 2.1904 },
+      price: 35,
+      currency: '€',
+      rating: 4.6,
+      reviewCount: 234,
+      image: 'https://images.unsplash.com/photo-1559827260-dc66d52bef19',
+      tags: ['outdoor', 'beach', 'active'],
+      confidence: 0.79,
+      duration: '2 hours',
+      category: 'outdoor'
+    }
+  ];
+
+  if (type === 'trending') {
+    return baseRecommendations.slice(0, 4).map(rec => ({
+      ...rec,
+      trending: true,
+      bookings_last_week: Math.floor(Math.random() * 500) + 100
+    }));
+  }
+
+  if (type === 'deals') {
+    return baseRecommendations.slice(2, 5).map(rec => ({
+      ...rec,
+      originalPrice: rec.price * 1.4,
+      discount: 30,
+      dealExpiry: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    }));
+  }
+
+  return baseRecommendations;
+};
+
+/**
+ * GET /api/v1/recommendations/personalized
+ * Returns personalized activity recommendations based on user preferences
+ * DR-204: VR-005.1
+ */
+router.get('/personalized', async (req: Request, res: Response): Promise<void> => {
+  try {
+    // TODO: Get userId from JWT token in Authorization header
+    // TODO: Fetch user preferences from database
+    // TODO: Use AI model to generate personalized recommendations
+
+    const { location, limit = '10' } = req.query;
+
+    let recommendations = getMockRecommendations('personalized');
+
+    // Filter by location if provided
+    if (location && typeof location === 'string') {
+      recommendations = recommendations.filter(rec =>
+        rec.location.toLowerCase().includes(location.toLowerCase())
+      );
     }
 
-    const result = await AmadeusService.getTravelRecommendations({
-      cityCodes: cityCodes as string,
-      travelerCountryCode: travelerCountryCode as string,
-      destinationCountryCode: destinationCountryCode as string
-    });
-    res.json(result);
+    // Apply limit
+    const limitNum = parseInt(limit as string, 10);
+    recommendations = recommendations.slice(0, limitNum);
+
+    res.json(recommendations);
   } catch (error) {
-    console.error('Travel recommendations error:', error);
+    console.error('Personalized recommendations error:', error);
     res.status(500).json({
-      error: 'Failed to get travel recommendations',
+      error: 'Failed to get personalized recommendations',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/v1/recommendations/trending
+ * Returns trending destinations and activities
+ * DR-204: VR-005.1
+ */
+router.get('/trending', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { limit = '6' } = req.query;
+
+    let recommendations = getMockRecommendations('trending');
+
+    const limitNum = parseInt(limit as string, 10);
+    recommendations = recommendations.slice(0, limitNum);
+
+    res.json(recommendations);
+  } catch (error) {
+    console.error('Trending recommendations error:', error);
+    res.status(500).json({
+      error: 'Failed to get trending recommendations',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/v1/recommendations/deals
+ * Returns current deals and special offers
+ * DR-204: VR-005.1
+ */
+router.get('/deals', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { limit = '5' } = req.query;
+
+    let recommendations = getMockRecommendations('deals');
+
+    const limitNum = parseInt(limit as string, 10);
+    recommendations = recommendations.slice(0, limitNum);
+
+    res.json(recommendations);
+  } catch (error) {
+    console.error('Deals recommendations error:', error);
+    res.status(500).json({
+      error: 'Failed to get deals',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/v1/recommendations/activities/:location
+ * Returns activity recommendations for a specific location
+ * DR-204: VR-005.1 - Specific endpoint for VR hotspot integration
+ */
+router.get('/activities/:location', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { location } = req.params;
+    const { type, limit = '10' } = req.query;
+
+    let recommendations = getMockRecommendations('personalized');
+
+    // Filter by location
+    recommendations = recommendations.filter(rec =>
+      rec.location.toLowerCase().includes(location.toLowerCase())
+    );
+
+    // Filter by activity type if provided
+    if (type && typeof type === 'string') {
+      recommendations = recommendations.filter(rec => rec.category === type);
+    }
+
+    const limitNum = parseInt(limit as string, 10);
+    recommendations = recommendations.slice(0, limitNum);
+
+    res.json({
+      location,
+      count: recommendations.length,
+      activities: recommendations
+    });
+  } catch (error) {
+    console.error('Activity recommendations error:', error);
+    res.status(500).json({
+      error: 'Failed to get activity recommendations',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }

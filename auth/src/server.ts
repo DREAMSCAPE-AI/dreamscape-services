@@ -7,13 +7,16 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { DatabaseService } from './database/DatabaseService';
 import router from './routes/auth';
+import healthRoutes from './routes/health';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import redisClient from './config/redis';
+import authKafkaService from './services/KafkaService';
 
 dotenv.config();
 
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = 3001; // Force port 3001
 
 
 app.use(helmet());
@@ -32,39 +35,9 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use('/api/v1/auth', router);
 
-app.get('/health', async (req, res) => {
-  const dbService = DatabaseService.getInstance();
-  const startTime = process.uptime();
-
-  try {
-    // Check database connectivity
-    const dbHealthy = await dbService.healthCheck();
-
-    res.json({
-      status: 'ok',
-      service: 'auth-service',
-      version: process.env.npm_package_version || '1.0.0',
-      timestamp: new Date().toISOString(),
-      uptime: Math.floor(startTime),
-      environment: process.env.NODE_ENV || 'development',
-      database: {
-        postgresql: dbHealthy.postgresql || false,
-        mongodb: dbHealthy.mongodb || false
-      },
-      memory: {
-        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
-        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024)
-      }
-    });
-  } catch (error) {
-    res.status(503).json({
-      status: 'degraded',
-      service: 'auth-service',
-      timestamp: new Date().toISOString(),
-      error: 'Database health check failed'
-    });
-  }
-});
+// Health check routes - INFRA-013.1
+app.use('/health', healthRoutes);
+app.use('/api/health', healthRoutes); // Alternative path for consistency
 
 app.use(errorHandler);
 
@@ -77,23 +50,53 @@ app.use('*', (req, res) => {
 
 const startServer = async () => {
   try {
+    // Initialize database
     const dbService = DatabaseService.getInstance();
     const initResult = await dbService.initialize();
-    
+
     if (initResult.success) {
       console.log('✅ Database initialized successfully');
       console.log(`📊 PostgreSQL: ${initResult.postgresql ? '✅' : '❌'}`);
-      console.log(`📊 MongoDB: ${initResult.mongodb ? '✅' : '⚠️ (non-critical)'}`);
     } else {
       console.error('❌ Database initialization failed:', initResult.errors);
       throw new Error(`Database initialization failed: ${initResult.errors.join(', ')}`);
     }
-    
+
+    // Initialize Redis
+    try {
+      await redisClient.connect();
+      console.log('✅ Redis initialized successfully');
+    } catch (error) {
+      console.warn('⚠️ Redis initialization failed (non-critical):', error);
+      console.warn('⚠️ Service will continue without Redis caching and session management');
+    }
+
+    // Initialize Kafka - DR-374 / DR-375
+    try {
+      await authKafkaService.initialize();
+      console.log('✅ Kafka initialized successfully');
+    } catch (error) {
+      console.warn('⚠️ Kafka initialization failed (non-critical):', error);
+      console.warn('⚠️ Service will continue without event publishing');
+    }
+
     const gracefulShutdown = async (signal: string) => {
       console.log(`\n🔄 Received ${signal}, starting graceful shutdown...`);
-      
+
       try {
+        // Disconnect database
         await dbService.disconnect();
+
+        // Disconnect Redis
+        if (redisClient.isReady()) {
+          await redisClient.disconnect();
+          console.log('✅ Redis disconnected');
+        }
+
+        // Disconnect Kafka - DR-374 / DR-375
+        await authKafkaService.shutdown();
+        console.log('✅ Kafka disconnected');
+
         process.exit(0);
       } catch (error) {
         console.error('❌ Error during graceful shutdown:', error);
@@ -103,10 +106,15 @@ const startServer = async () => {
 
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-    
-    app.listen(PORT, () => {
+
+    app.listen(PORT, async () => {
       console.log(`🚀 Auth service running on port ${PORT}`);
       console.log(`🌐 Client URL: ${process.env.CLIENT_URL || 'http://localhost:5173'}`);
+      console.log(`💾 Redis: ${redisClient.isReady() ? '✅ Connected' : '⚠️ Not available'}`);
+
+      // Check Kafka health - DR-374 / DR-375
+      const kafkaHealth = await authKafkaService.healthCheck();
+      console.log(`📨 Kafka: ${kafkaHealth.healthy ? '✅ Connected' : '⚠️ Not available'}`);
     });
   } catch (error) {
     console.error('💥 Failed to start server:', error);
