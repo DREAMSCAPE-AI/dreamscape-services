@@ -1,6 +1,10 @@
 import jsPDF from 'jspdf';
 import { createEvents, EventAttributes } from 'ics';
-import type { Itinerary, ItineraryItem } from '@prisma/client';
+import prisma from '../database/prisma';
+
+// Inferred Prisma types
+type Itinerary = NonNullable<Awaited<ReturnType<typeof prisma.itinerary.findUnique>>>;
+type ItineraryItem = NonNullable<Awaited<ReturnType<typeof prisma.itineraryItem.findUnique>>>;
 
 /**
  * Service for exporting itineraries in various formats
