@@ -3,6 +3,7 @@ import { body, validationResult } from 'express-validator';
 import { AuthService } from '@services/AuthService';
 import { authenticateToken, authenticateRefreshToken, AuthRequest } from '@middleware/auth';
 import { loginLimiter, registerLimiter, refreshLimiter } from '@middleware/rateLimiter';
+import authKafkaService from '@services/KafkaService';
 
 const router = express.Router();
 
@@ -133,14 +134,23 @@ router.post('/login', conditionalRateLimit(loginLimiter), loginValidation, async
     if (handleValidationErrors(req, res)) return;
 
     const result = await AuthService.login(req.body);
-    
+
     if (result.success && result.data) {
       setRefreshTokenCookie(res, result.data.tokens.refreshToken, req.body.rememberMe || false);
-      
+
       const { refreshToken, ...tokensWithoutRefresh } = result.data.tokens;
       result.data.tokens = tokensWithoutRefresh as any;
+
+      // Publish Kafka event - DR-374 / DR-376
+      authKafkaService.publishLogin({
+        userId: result.data.user.id,
+        email: result.data.user.email,
+        timestamp: new Date(),
+        ipAddress: req.ip || req.headers['x-forwarded-for'] as string || 'unknown',
+        userAgent: req.headers['user-agent'] || 'unknown'
+      }).catch(err => console.error('[Login] Failed to publish Kafka event:', err));
     }
-    
+
     const statusCode = result.success ? 200 : 401;
     res.status(statusCode).json(result);
   } catch (error) {
@@ -250,7 +260,7 @@ router.post('/change-password', authenticateToken, changePasswordValidation, asy
 
     const { currentPassword, newPassword } = req.body;
     const result = await AuthService.changePassword(req.user.id, currentPassword, newPassword);
-    
+
     if (result.success) {
       res.clearCookie('refreshToken', {
         httpOnly: true,
@@ -258,8 +268,15 @@ router.post('/change-password', authenticateToken, changePasswordValidation, asy
         sameSite: 'strict',
         path: '/'
       });
+
+      // Publish Kafka event - DR-374 / DR-376
+      authKafkaService.publishPasswordChanged({
+        userId: req.user.id,
+        timestamp: new Date(),
+        ipAddress: req.ip || req.headers['x-forwarded-for'] as string || 'unknown'
+      }).catch(err => console.error('[ChangePassword] Failed to publish Kafka event:', err));
     }
-    
+
     const statusCode = result.success ? 200 : 400;
     res.status(statusCode).json(result);
   } catch (error) {
@@ -303,14 +320,23 @@ router.post('/refresh', conditionalRateLimit(refreshLimiter), async (req: expres
     }
 
     const result = await AuthService.refreshToken(refreshToken);
-    
+
     if (result.success && result.data) {
       setRefreshTokenCookie(res, result.data.tokens.refreshToken, false);
-      
+
       const { refreshToken: newRefreshToken, ...tokensWithoutRefresh } = result.data.tokens;
       result.data.tokens = tokensWithoutRefresh as any;
+
+      // Publish Kafka event - DR-374 / DR-376
+      if (result.data.user?.id) {
+        authKafkaService.publishTokenRefreshed({
+          userId: result.data.user.id,
+          timestamp: new Date(),
+          ipAddress: req.ip || req.headers['x-forwarded-for'] as string || 'unknown'
+        }).catch(err => console.error('[TokenRefresh] Failed to publish Kafka event:', err));
+      }
     }
-    
+
     const statusCode = result.success ? 200 : 401;
     res.status(statusCode).json(result);
   } catch (error) {
@@ -355,17 +381,32 @@ router.post('/logout', async (req: express.Request, res: express.Response) => {
     const refreshToken = req.cookies.refreshToken;
     const authHeader = req.headers.authorization;
     const accessToken = authHeader && authHeader.split(' ')[1];
-    
+
+    let loggedOutUserId: string | undefined;
+
     if (refreshToken) {
-      await AuthService.logout(refreshToken, accessToken);
+      const logoutResult = await AuthService.logout(refreshToken, accessToken);
+      // Extract userId from logout result if available
+      if (logoutResult && typeof logoutResult === 'object' && 'userId' in logoutResult) {
+        loggedOutUserId = (logoutResult as any).userId;
+      }
     }
-    
+
     res.clearCookie('refreshToken', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
       path: '/'
     });
+
+    // Publish Kafka event - DR-374 / DR-376
+    if (loggedOutUserId) {
+      authKafkaService.publishLogout({
+        userId: loggedOutUserId,
+        timestamp: new Date(),
+        ipAddress: req.ip || req.headers['x-forwarded-for'] as string || 'unknown'
+      }).catch(err => console.error('[Logout] Failed to publish Kafka event:', err));
+    }
 
     res.json({
       success: true,

@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { config } from '@/config/environment';
+import cacheService from './CacheService';
 
 export interface AmadeusTokenResponse {
   access_token: string;
@@ -244,7 +245,7 @@ class AmadeusService {
     try {
       // Clean and validate the keyword
       const cleanKeyword = this.cleanLocationKeyword(params.keyword);
-      
+
       if (!cleanKeyword || cleanKeyword.length < 2) {
         throw new Error('Keyword must be at least 2 characters long');
       }
@@ -254,23 +255,30 @@ class AmadeusService {
         'page[limit]': 10,
         'page[offset]': 0
       };
-      
+
       // Only add subType if it's provided and valid
       if (params.subType && ['AIRPORT', 'CITY', 'HOTEL', 'DISTRICT'].includes(params.subType)) {
         searchParams.subType = params.subType;
       }
-      
+
       // Only add countryCode if it's provided and valid (2-letter ISO code)
       if (params.countryCode && /^[A-Z]{2}$/.test(params.countryCode)) {
         searchParams.countryCode = params.countryCode;
       }
 
       console.log('Location search params:', searchParams);
-      
-      const response = await this.api.get('/v1/reference-data/locations', { 
-        params: searchParams 
-      });
-      return response.data;
+
+      // Use cache wrapper
+      return await cacheService.cacheWrapper(
+        'locations',
+        searchParams,
+        async () => {
+          const response = await this.api.get('/v1/reference-data/locations', {
+            params: searchParams
+          });
+          return response.data;
+        }
+      );
     } catch (error) {
       console.error('Amadeus location search error:', error);
       throw this.handleError(error, `Location search for "${params.keyword}"`);
@@ -299,61 +307,66 @@ class AmadeusService {
   }
 
   async searchHotels(params: HotelSearchParams): Promise<any> {
-    try {
-      // Validate required parameters
-      if (!params.checkInDate || !params.checkOutDate) {
-        throw new Error('Check-in and check-out dates are required');
-      }
-  
-      // Validate date format (YYYY-MM-DD)
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-      if (!dateRegex.test(params.checkInDate) || !dateRegex.test(params.checkOutDate)) {
-        throw new Error('Dates must be in YYYY-MM-DD format');
-      }
-  
-      // Validate that check-in is before check-out
-      if (new Date(params.checkInDate) >= new Date(params.checkOutDate)) {
-        throw new Error('Check-in date must be before check-out date');
-      }
-  
-      // Set pagination defaults
-      const page = params.page || { offset: 0, limit: 10 };
-      const limit = Math.min(50, Math.max(1, page.limit || 10));
-      const offset = Math.max(0, page.offset || 0);
-  
-      const searchParams: any = {
-        checkInDate: params.checkInDate,
-        checkOutDate: params.checkOutDate,
-        adults: Math.max(1, Math.min(8, params.adults ?? 1)), // Clamp between 1-8
-        roomQuantity: Math.max(1, Math.min(8, params.roomQuantity ?? 1)), // Clamp between 1-8
-        view: 'FULL_ALL_IMAGES'
-      };
-  
-      if (params.page) {
-        searchParams.page = {
-          limit: params.page.limit,
-          offset: params.page.offset
-        };
-      }
-  
-      try {
-        const response = await this.api.get('/v3/shopping/hotel-offers', {
-          params: searchParams
-        });
-        return response.data;
-      } catch (error: any) {
-        // If we get a rate limit error or no city code, try the fallback
-        if (error.response?.status === 429 || !params.cityCode) {
-          throw this.handleError(error, `Hotel search for ${params.cityCode || 'coordinates'}`);
-        }
-  
+    // Wrap with cache for better performance
+    return await cacheService.cacheWrapper(
+      'hotels',
+      params,
+      async () => {
         try {
-          console.log('Trying hotel list endpoint as fallback...');
-          const fallbackResponse = await this.api.get('/v1/reference-data/locations/hotels/by-city', {
-            params: {
-              cityCode: params.cityCode,
-              radius: params.radius || 5,
-              radiusUnit: params.radiusUnit || 'KM',
+          // Validate required parameters
+          if (!params.checkInDate || !params.checkOutDate) {
+            throw new Error('Check-in and check-out dates are required');
+          }
+
+          // Validate date format (YYYY-MM-DD)
+          const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+          if (!dateRegex.test(params.checkInDate) || !dateRegex.test(params.checkOutDate)) {
+            throw new Error('Dates must be in YYYY-MM-DD format');
+          }
+
+          // Validate that check-in is before check-out
+          if (new Date(params.checkInDate) >= new Date(params.checkOutDate)) {
+            throw new Error('Check-in date must be before check-out date');
+          }
+
+          // Set pagination defaults
+          const page = params.page || { offset: 0, limit: 10 };
+          const limit = Math.min(50, Math.max(1, page.limit || 10));
+          const offset = Math.max(0, page.offset || 0);
+
+          const searchParams: any = {
+            checkInDate: params.checkInDate,
+            checkOutDate: params.checkOutDate,
+            adults: Math.max(1, Math.min(8, params.adults ?? 1)), // Clamp between 1-8
+            roomQuantity: Math.max(1, Math.min(8, params.roomQuantity ?? 1)), // Clamp between 1-8
+            view: 'FULL_ALL_IMAGES'
+          };
+
+          if (params.page) {
+            searchParams.page = {
+              limit: params.page.limit,
+              offset: params.page.offset
+            };
+          }
+
+          try {
+            const response = await this.api.get('/v3/shopping/hotel-offers', {
+              params: searchParams
+            });
+            return response.data;
+          } catch (error: any) {
+            // If we get a rate limit error or no city code, try the fallback
+            if (error.response?.status === 429 || !params.cityCode) {
+              throw this.handleError(error, `Hotel search for ${params.cityCode || 'coordinates'}`);
+            }
+
+            try {
+              console.log('Trying hotel list endpoint as fallback...');
+              const fallbackResponse = await this.api.get('/v1/reference-data/locations/hotels/by-city', {
+                params: {
+                  cityCode: params.cityCode,
+                  radius: params.radius || 5,
+                  radiusUnit: params.radiusUnit || 'KM',
               hotelSource: 'ALL'
             }
           });
@@ -367,12 +380,44 @@ class AmadeusService {
       // This catch block was missing - it handles any errors from the validation logic
       throw this.handleError(error, `Hotel search for ${params.cityCode || 'coordinates'}`);
     }
+      }
+    );
   }
 
   async searchFlights(params: FlightSearchParams) {
     try {
-      const response = await this.api.get('/v2/shopping/flight-offers', { params });
-      return response.data;
+      // Use cache wrapper for flight search
+      return await cacheService.cacheWrapper(
+        'flights',
+        params,
+        async () => {
+          const response = await this.api.get('/v2/shopping/flight-offers', { params });
+          return response.data;
+        }
+      );
+    } catch (error) {
+      throw this.handleError(error, 'Flight search failed');
+    }
+  }
+
+  /**
+   * Search flights with DTO mapping
+   * Ticket: DR-133 - VOYAGE-001.4 : Service Flight Search
+   * Maps Amadeus API response to internal DTOs
+   */
+  async searchFlightsWithMapping(params: FlightSearchParams) {
+    try {
+      // Use cache wrapper for flight search with mapping
+      return await cacheService.cacheWrapper(
+        'flightOffers',
+        params,
+        async () => {
+          const response = await this.api.get('/v2/shopping/flight-offers', { params });
+          // Note: FlightOfferMapper can be imported when needed
+          // For now, return raw data - mapper will be used in routes
+          return response.data;
+        }
+      );
     } catch (error) {
       throw this.handleError(error, 'Flight search failed');
     }
@@ -389,8 +434,15 @@ class AmadeusService {
 
   async getHotelDetails(offerId: string): Promise<any> {
     try {
-      const response = await this.api.get(`/v3/shopping/hotel-offers/${offerId}`);
-      return response.data;
+      // Use cache wrapper for hotel details
+      return await cacheService.cacheWrapper(
+        'hotelDetails',
+        { offerId },
+        async () => {
+          const response = await this.api.get(`/v3/shopping/hotel-offers/${offerId}`);
+          return response.data;
+        }
+      );
     } catch (error) {
       throw this.handleError(error, 'Failed to get hotel details');
     }
@@ -414,12 +466,107 @@ class AmadeusService {
     }
   }
 
-  async searchActivities(params: ActivitySearchParams) {
+  /**
+   * Create a hotel booking
+   * @param offerId - The hotel offer ID from search results
+   * @param guests - Array of guest information
+   * @param payments - Payment information
+   */
+  async createHotelBooking(params: {
+    offerId: string;
+    guests: Array<{
+      id?: number;
+      name: {
+        title: string;
+        firstName: string;
+        lastName: string;
+      };
+      contact: {
+        phone: string;
+        email: string;
+      };
+    }>;
+    payments: Array<{
+      method: string;
+      card?: {
+        vendorCode: string;
+        cardNumber: string;
+        expiryDate: string;
+      };
+    }>;
+  }): Promise<any> {
     try {
-      const response = await this.api.get('/v1/shopping/activities', { params });
+      const bookingData = {
+        data: {
+          offerId: params.offerId,
+          guests: params.guests.map((guest, index) => ({
+            id: guest.id || index + 1,
+            name: {
+              title: guest.name.title,
+              firstName: guest.name.firstName,
+              lastName: guest.name.lastName
+            },
+            contact: {
+              phone: guest.contact.phone,
+              email: guest.contact.email
+            }
+          })),
+          payments: params.payments.map(payment => ({
+            method: payment.method,
+            card: payment.card ? {
+              vendorCode: payment.card.vendorCode,
+              cardNumber: payment.card.cardNumber,
+              expiryDate: payment.card.expiryDate
+            } : undefined
+          }))
+        }
+      };
+
+      const response = await this.api.post('/v1/booking/hotel-bookings', bookingData);
       return response.data;
     } catch (error) {
-      throw this.handleError(error, 'Activities search failed');
+      throw this.handleError(error, 'Hotel booking creation failed');
+    }
+  }
+
+  async searchActivities(params: {
+    latitude?: number;
+    longitude?: number;
+    radius?: number;
+    north?: number;
+    west?: number;
+    south?: number;
+    east?: number;
+  }): Promise<any> {
+    try {
+      await this.authenticate();
+
+      const DEBUG_MODE = false; // Set to true to enable detailed logging
+
+      if (DEBUG_MODE) {
+        console.log('🚀 [AmadeusService] Searching activities with params:', params);
+      }
+
+      const response = await this.api.get('/v1/shopping/activities', { params });
+
+      if (DEBUG_MODE) {
+        console.log('✅ [AmadeusService] Activities search successful');
+        console.log('📊 [AmadeusService] Response structure:', {
+          hasData: !!response.data?.data,
+          dataCount: response.data?.data?.length || 0,
+          hasMeta: !!response.data?.meta
+        });
+
+        if (response.data?.data && response.data.data.length > 0) {
+          const firstActivity = response.data.data[0];
+          console.log('📍 [AmadeusService] First activity raw data:', JSON.stringify(firstActivity, null, 2));
+        }
+      }
+
+      return response.data;
+    } catch (error) {
+      console.error('❌ [AmadeusService] searchActivities error:', error);
+      throw error;
     }
   }
 
@@ -439,8 +586,15 @@ class AmadeusService {
     currencyCode?: string;
   }): Promise<any> {
     try {
-      const response = await this.api.get('/v1/analytics/itinerary-price-metrics', { params });
-      return response.data;
+      // Use cache wrapper for flight price analysis
+      return await cacheService.cacheWrapper(
+        'flightPrices',
+        params,
+        async () => {
+          const response = await this.api.get('/v1/analytics/itinerary-price-metrics', { params });
+          return response.data;
+        }
+      );
     } catch (error) {
       throw this.handleError(error, 'Flight price analysis failed');
     }
@@ -687,8 +841,15 @@ class AmadeusService {
     ICAOCode?: string;
   }): Promise<any> {
     try {
-      const response = await this.api.get('/v1/reference-data/airlines', { params });
-      return response.data;
+      // Use cache wrapper for airline lookup (long TTL - 7 days)
+      return await cacheService.cacheWrapper(
+        'airlines',
+        params,
+        async () => {
+          const response = await this.api.get('/v1/reference-data/airlines', { params });
+          return response.data;
+        }
+      );
     } catch (error) {
       throw this.handleError(error, 'Airline code lookup failed');
     }
@@ -966,10 +1127,17 @@ class AmadeusService {
         'page[limit]': 10
       };
 
-      const response = await this.api.get('/v1/reference-data/locations', { 
-        params: searchParams 
-      });
-      return response.data;
+      // Use cache wrapper for airport search (long TTL - 24 hours)
+      return await cacheService.cacheWrapper(
+        'airports',
+        searchParams,
+        async () => {
+          const response = await this.api.get('/v1/reference-data/locations', {
+            params: searchParams
+          });
+          return response.data;
+        }
+      );
     } catch (error) {
       throw this.handleError(error, 'Airport search failed');
     }
@@ -999,6 +1167,17 @@ class AmadeusService {
       return response.data;
     } catch (error) {
       throw this.handleError(error, 'Flight offers pricing failed');
+    }
+  }
+
+  async getActivityById(activityId: string): Promise<any> {
+    try {
+      await this.authenticate();
+      const response = await this.api.get(`/v1/shopping/activities/${activityId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Amadeus getActivityById error:', error);
+      throw error;
     }
   }
 }

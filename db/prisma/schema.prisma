@@ -11,60 +11,65 @@ datasource db {
 
 // ========== AUTH SERVICE MODELS ==========
 model User {
-  id            String   @id @default(uuid())
-  email         String   @unique
-  username      String?  @unique
-  password      String
-  firstName     String?
-  lastName      String?
-  phoneNumber   String?
-  dateOfBirth   DateTime?
-  nationality   String?
-  userCategory  UserCategory?  @default(LEISURE)
-  isVerified    Boolean  @default(false)
-  role          Role     @default(USER)
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  
+  id           String        @id @default(uuid())
+  email        String        @unique
+  username     String?       @unique
+  password     String
+  firstName    String?
+  lastName     String?
+  phoneNumber  String?
+  dateOfBirth  DateTime?
+  nationality  String?
+  userCategory UserCategory? @default(LEISURE)
+  isVerified   Boolean       @default(false)
+  role         Role          @default(USER)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
   // Relations
-  profile   UserProfile?
-  behaviors UserBehavior[]
-  sessions      Session[]
+  profile          UserProfile?
+  behaviors        UserBehavior[]
+  sessions         Session[]
   tokenBlacklist   TokenBlacklist[]
-  searches      SearchHistory[]
-  preferences   UserPreferences?
-  settings      UserSettings?
-  
+  searches         SearchHistory[]
+  preferences      UserPreferences?
+  settings         UserSettings?
+  travelOnboarding TravelOnboardingProfile?
+
+  // Onboarding status
+  onboardingCompleted   Boolean   @default(false)
+  onboardingCompletedAt DateTime?
+
   @@map("users")
 }
 
 model UserPreferences {
-  id                    String  @id @default(cuid())
-  userId                String  @unique
-  preferredAirlines     String[]
-  preferredCabinClass   String?
-  budgetRange           Json?   // {min: number, max: number}
+  id                     String   @id @default(cuid())
+  userId                 String   @unique
+  preferredAirlines      String[]
+  preferredCabinClass    String?
+  budgetRange            Json? // {min: number, max: number}
   preferredDepartureTime String? // morning, afternoon, evening
-  loyaltyPrograms       Json?   // Array of loyalty program details
-  
+  loyaltyPrograms        Json? // Array of loyalty program details
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@map("user_preferences")
 }
 
 // ========== USER SERVICE MODELS ==========
 model UserProfile {
-  id          String   @id @default(cuid())
-  userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   firstName   String
   lastName    String
   phone       String?
   dateOfBirth DateTime?
   avatar      String?
   preferences Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@map("user_profiles")
 }
@@ -81,39 +86,173 @@ model UserBehavior {
 }
 
 model UserSettings {
-  id          String   @id @default(cuid())
-  userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // Account preferences
-  language    String   @default("English")
-  currency    String   @default("USD")
-  timezone    String   @default("UTC")
-  
+  language String @default("English")
+  currency String @default("USD")
+  timezone String @default("UTC")
+
   // Notification settings
-  dealAlerts      Boolean @default(true)
-  tripReminders   Boolean @default(true)
-  priceAlerts     Boolean @default(true)
-  newsletter      Boolean @default(false)
-  
+  dealAlerts    Boolean @default(true)
+  tripReminders Boolean @default(true)
+  priceAlerts   Boolean @default(true)
+  newsletter    Boolean @default(false)
+
   // Privacy settings
   profileVisibility String  @default("public") // public, private
-  dataSharing      Boolean @default(false)
-  marketing        Boolean @default(true)
-  
+  dataSharing       Boolean @default(false)
+  marketing         Boolean @default(true)
+
   // Travel preferences
   preferredDestinations String[] @default([])
-  accommodationType    String[] @default([])
-  activities           String[] @default([])
-  dietary              String[] @default([])
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  accommodationType     String[] @default([])
+  activities            String[] @default([])
+  dietary               String[] @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("user_settings")
 }
 
+// ========== ONBOARDING SERVICE MODELS ==========
+model TravelOnboardingProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Statut du questionnaire
+  isCompleted    Boolean   @default(false)
+  completedSteps String[]  @default([]) // Track progress per section
+  completedAt    DateTime?
+  version        Int       @default(1) // For schema evolution
+
+  // === DESTINATIONS & STYLE ===
+  preferredDestinations Json? // {regions: string[], countries: string[], climates: string[]}
+  travelStyle           TravelStyle?
+
+  // === BUDGET GLOBAL ===
+  globalBudgetRange Json? // {min: number, max: number, currency: string}
+  budgetByCategory  Json? // {transport: {...}, accommodation: {...}, activities: {...}, food: {...}}
+  budgetFlexibility BudgetFlexibility?
+
+  // === TYPES DE VOYAGE ===
+  travelTypes    TravelType[] @default([])
+  travelPurposes String[]     @default([]) // leisure, business, education, health, etc.
+
+  // === PÉRIODE & TIMING ===
+  preferredSeasons      String[]         @default([]) // spring, summer, autumn, winter
+  preferredTripDuration Json? // {short: {min: 1, max: 3}, medium: {min: 4, max: 7}, long: {min: 8, max: 21}}
+  dateFlexibility       DateFlexibility?
+
+  // === HÉBERGEMENT ===
+  accommodationTypes String[]      @default([]) // hotel, apartment, hostel, resort, camping, etc.
+  accommodationLevel ComfortLevel?
+  roomPreferences    Json? // {type: string, amenities: string[], view: string}
+
+  // === TRANSPORT ===
+  preferredAirlines    String[] @default([])
+  cabinClassPreference String? // economy, premium_economy, business, first
+  transportModes       String[] @default([]) // flight, train, car, bus, boat
+  transportBudgetShare Float? // Percentage of total budget for transport
+
+  // === ACTIVITÉS & INTÉRÊTS ===
+  activityTypes      String[]       @default([]) // museums, nature, adventure, nightlife, shopping, food, etc.
+  interestCategories String[]       @default([]) // history, art, nature, technology, sports, wellness, etc.
+  activityLevel      ActivityLevel?
+
+  // === GROUPE DE VOYAGE ===
+  travelGroupTypes   String[] @default([]) // solo, couple, family, friends, business_group
+  groupSize          Json? // {min: number, max: number, typical: number}
+  travelWithChildren Boolean  @default(false)
+  childrenAges       Int[]    @default([])
+
+  // === CONTRAINTES & BESOINS SPÉCIAUX ===
+  dietaryRequirements    String[] @default([])
+  accessibilityNeeds     String[] @default([])
+  healthConsiderations   String[] @default([])
+  languageBarriers       String[] @default([]) // Languages the user doesn't speak
+  culturalConsiderations String[] @default([])
+
+  // === CONFORT & LUXE ===
+  comfortLevel      ComfortLevel?
+  serviceLevel      String? // self_service, standard_service, full_service, concierge
+  privacyPreference String? // social, mixed, private
+
+  // === PRÉFÉRENCES CLIMATIQUES ===
+  climatePreferences String[] @default([]) // tropical, temperate, cold, arid, humid, etc.
+  weatherTolerances  Json? // {hot: boolean, cold: boolean, rain: boolean, humidity: boolean}
+
+  // === EXPÉRIENCES ===
+  experienceLevel   String? // beginner, intermediate, experienced, expert
+  riskTolerance     RiskTolerance?
+  culturalImmersion String? // tourist, explorer, local_experience
+
+  // === LOYAUTÉ & PROGRAMMES ===
+  loyaltyPrograms    Json? // Array of {program: string, number: string, level: string}
+  paymentPreferences String[] @default([]) // credit_card, debit, digital_wallet, etc.
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("travel_onboarding_profiles")
+}
+
 // ========== VOYAGE SERVICE MODELS ==========
+model Itinerary {
+  id           String   @id @default(uuid())
+  userId       String
+  title        String
+  startDate    DateTime
+  endDate      DateTime
+  destinations String[] @default([])
+  aiGenerated  Boolean  @default(false) // Pour future intégration IA
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  items ItineraryItem[]
+
+  @@map("itineraries")
+}
+
+model ItineraryItem {
+  id          String            @id @default(uuid())
+  itineraryId String
+  itinerary   Itinerary         @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+  type        ItineraryItemType
+
+  // Cart compatibility fields
+  itemId   String? // External ID (Amadeus offer ID, booking reference, etc.)
+  itemData Json // Full cart-compatible data (FlightItemData | HotelItemData | ActivityItemData)
+  price    Decimal @db.Decimal(10, 2)
+  currency String  @default("USD")
+  quantity Int     @default(1)
+
+  // Display fields (derived from itemData for quick access)
+  title       String
+  description String?
+  startDate   DateTime
+  endDate     DateTime
+  location    String
+
+  // UI fields
+  order     Int      @default(0) // Pour drag-n-drop
+  createdAt DateTime @default(now())
+
+  @@map("itinerary_items")
+}
+
+enum ItineraryItemType {
+  FLIGHT
+  HOTEL
+  ACTIVITY
+}
+
 model FlightData {
   id            String   @id @default(cuid())
   flightNumber  String
@@ -131,30 +270,36 @@ model FlightData {
 }
 
 model HotelData {
-  id          String   @id @default(cuid())
-  name        String
-  location    String
-  rating      Float?
-  pricePerNight Decimal @db.Decimal(10, 2)
-  currency    String   @default("EUR")
-  amenities   Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(cuid())
+  name          String
+  location      String
+  rating        Float?
+  pricePerNight Decimal  @db.Decimal(10, 2)
+  currency      String   @default("EUR")
+  amenities     Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@map("hotel_data")
 }
 
 model BookingData {
-  id          String   @id @default(cuid())
-  userId      String
-  type        BookingType
-  reference   String   @unique
-  status      BookingStatus
-  totalAmount Decimal  @db.Decimal(10, 2)
-  currency    String   @default("EUR")
-  data        Json     // Flexible data for different booking types
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String        @id @default(cuid())
+  userId    String
+  type      BookingType
+  reference String        @unique
+  status    BookingStatus
+
+  // Nouveaux champs pour le flow panier
+  paymentIntentId String? // Stripe Payment Intent ID
+  confirmedAt     DateTime?
+
+  totalAmount Decimal @db.Decimal(10, 2)
+  currency    String  @default("EUR")
+  data        Json // Flexible data for different booking types
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("booking_data")
 }
@@ -164,7 +309,7 @@ model LocationData {
   name        String
   country     String
   city        String
-  coordinates Json?    // {lat: number, lng: number}
+  coordinates Json? // {lat: number, lng: number}
   description String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -172,22 +317,51 @@ model LocationData {
   @@map("location_data")
 }
 
+// ========== CART & BOOKING MODELS ==========
+model CartData {
+  id         String     @id @default(uuid())
+  userId     String
+  items      CartItem[]
+  totalPrice Decimal    @db.Decimal(10, 2)
+  currency   String     @default("EUR")
+  expiresAt  DateTime
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@map("cart_data")
+}
+
+model CartItem {
+  id        String       @id @default(uuid())
+  cartId    String
+  cart      CartData     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  type      CartItemType // "flight", "hotel", "activity"
+  itemId    String // Reference to external ID (Amadeus offer ID, etc.)
+  itemData  Json // Flexible storage for item details (flight info, hotel info, etc.)
+  quantity  Int          @default(1)
+  price     Decimal      @db.Decimal(10, 2)
+  currency  String       @default("EUR")
+  createdAt DateTime     @default(now())
+
+  @@map("cart_items")
+}
+
 // ========== AI SERVICE MODELS ==========
 model PredictionData {
-  id          String   @id @default(cuid())
-  userId      String?
-  type        PredictionType
-  input       Json
-  output      Json
-  confidence  Float?
-  createdAt   DateTime @default(now())
+  id         String         @id @default(cuid())
+  userId     String?
+  type       PredictionType
+  input      Json
+  output     Json
+  confidence Float?
+  createdAt  DateTime       @default(now())
 
   @@map("prediction_data")
 }
 
 model Analytics {
   id        String   @id @default(cuid())
-  service   String   // 'auth', 'user', 'voyage', 'ai'
+  service   String // 'auth', 'user', 'voyage', 'ai'
   event     String
   data      Json?
   userId    String?
@@ -197,24 +371,24 @@ model Analytics {
 }
 
 model SearchHistory {
-  id              String   @id @default(cuid())
-  userId          String?
-  sessionId       String   // For anonymous users
-  
+  id        String  @id @default(cuid())
+  userId    String?
+  sessionId String // For anonymous users
+
   // Search parameters
-  origin          String
-  destination     String
-  departureDate   DateTime
-  returnDate      DateTime?
-  passengers      Json     // {adults: number, children: number, infants: number}
-  cabinClass      String?
-  
+  origin        String
+  destination   String
+  departureDate DateTime
+  returnDate    DateTime?
+  passengers    Json // {adults: number, children: number, infants: number}
+  cabinClass    String?
+
   // Search metadata
-  searchedAt      DateTime @default(now())
-  resultsCount    Int?
-  
+  searchedAt   DateTime @default(now())
+  resultsCount Int?
+
   user User? @relation(fields: [userId], references: [id])
-  
+
   @@map("search_history")
 }
 
@@ -228,10 +402,19 @@ enum BookingType {
 }
 
 enum BookingStatus {
-  PENDING
-  CONFIRMED
-  CANCELLED
-  COMPLETED
+  DRAFT // Nouveau: Panier non finalisé
+  PENDING_PAYMENT // Nouveau: En attente de paiement
+  PENDING // Existant
+  CONFIRMED // Existant
+  CANCELLED // Existant
+  COMPLETED // Existant
+  FAILED // Nouveau: Échec de réservation
+}
+
+enum CartItemType {
+  FLIGHT
+  HOTEL
+  ACTIVITY
 }
 
 enum PredictionType {
@@ -259,10 +442,10 @@ model Session {
   userId    String
   expiresAt DateTime
   createdAt DateTime @default(now())
-  
+
   // Relations
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@map("sessions")
 }
 
@@ -272,9 +455,9 @@ model TokenBlacklist {
   userId    String
   expiresAt DateTime
   createdAt DateTime @default(now()) @map("created_at")
-  
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@map("token_blacklist")
 }
 
@@ -282,4 +465,122 @@ enum Role {
   USER
   ADMIN
   MODERATOR
+}
+
+// ========== ONBOARDING ENUMS ==========
+enum TravelType {
+  ADVENTURE
+  CULTURAL
+  RELAXATION
+  BUSINESS
+  FAMILY
+  ROMANTIC
+  WELLNESS
+  EDUCATIONAL
+  CULINARY
+  SHOPPING
+  NIGHTLIFE
+  NATURE
+  URBAN
+  BEACH
+  MOUNTAIN
+  HISTORICAL
+}
+
+enum TravelStyle {
+  PLANNED
+  SPONTANEOUS
+  MIXED
+}
+
+enum ComfortLevel {
+  BASIC
+  STANDARD
+  PREMIUM
+  LUXURY
+}
+
+enum BudgetFlexibility {
+  STRICT
+  FLEXIBLE
+  VERY_FLEXIBLE
+}
+
+enum DateFlexibility {
+  FLEXIBLE
+  SEMI_FLEXIBLE
+  FIXED
+}
+
+enum ActivityLevel {
+  LOW
+  MODERATE
+  HIGH
+  VERY_HIGH
+}
+
+enum RiskTolerance {
+  CONSERVATIVE
+  MODERATE
+  ADVENTUROUS
+}
+
+// ========== PAYMENT SERVICE MODELS ==========
+model PaymentTransaction {
+  id               String @id @default(uuid())
+  paymentIntentId  String @unique
+  bookingId        String
+  bookingReference String
+  userId           String
+
+  // Payment details
+  amount   Decimal                  @db.Decimal(10, 2)
+  currency String
+  status   PaymentTransactionStatus
+
+  // Stripe details
+  paymentMethod    String?
+  stripeCustomerId String?
+
+  // Timestamps
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  confirmedAt DateTime?
+  failedAt    DateTime?
+  refundedAt  DateTime?
+
+  // Failure details
+  failureReason String?
+
+  // Metadata
+  metadata Json?
+
+  @@index([bookingId])
+  @@index([userId])
+  @@index([status])
+  @@map("payment_transactions")
+}
+
+model ProcessedWebhookEvent {
+  id          String   @id @default(uuid())
+  eventId     String   @unique // Stripe event ID
+  eventType   String
+  processed   Boolean  @default(true)
+  processedAt DateTime @default(now())
+
+  // Metadata for debugging
+  payload Json?
+
+  @@index([eventId])
+  @@index([processedAt])
+  @@map("processed_webhook_events")
+}
+
+enum PaymentTransactionStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELED
+  REFUNDED
 }

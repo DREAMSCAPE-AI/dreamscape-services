@@ -1,16 +1,39 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
-    "module": "ESNext",
-    "moduleResolution": "Node",
-    "outDir": "dist",
-    "rootDir": "src",
+    "target": "ES2022",
+    "module": "commonjs",
+    "lib": ["ES2022"],
+    "outDir": "./dist",
+    "strict": true,
     "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
-    "strict": false,
-    "skipLibCheck": true
+    "sourceMap": true,
+    "declaration": false,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@/config/*": ["src/config/*"],
+      "@/services/*": ["src/services/*"],
+      "@/routes/*": ["src/routes/*"],
+      "@/middleware/*": ["src/middleware/*"],
+      "@/dto/*": ["src/dto/*"],
+      "@/mappers/*": ["src/mappers/*"],
+      "@dreamscape/db": ["../db/index.ts"]
+    }
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests"]
+  "include": ["src/**/*", "../db/**/*"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "src/database/seed.ts",
+    "../db/seed.ts"
+  ]
 }
