@@ -20,9 +20,10 @@ app.use(cors({
 }));
 
 // Raw body middleware for webhooks (must be BEFORE express.json())
-app.use(rawBodyMiddleware);
+// Use express.raw() for webhook endpoint to preserve raw body
+app.use('/api/v1/payment/webhook', express.raw({ type: 'application/json' }));
 
-// JSON body parser
+// JSON body parser for all other endpoints
 app.use(express.json());
 
 // Health check endpoint
