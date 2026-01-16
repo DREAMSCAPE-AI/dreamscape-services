@@ -9,6 +9,7 @@ import {
   KAFKA_TOPICS,
   CONSUMER_GROUPS,
   createEvent,
+  type KafkaTopic,
   type AuthLoginPayload,
   type AuthLogoutPayload,
   type AuthTokenRefreshedPayload,
@@ -187,12 +188,12 @@ class AuthKafkaService {
       return;
     }
 
-    const subscriptions = [];
+    const subscriptions: Array<{ topic: KafkaTopic; handler: MessageHandler<any> }> = [];
 
     if (handlers.onUserCreated) {
       subscriptions.push({
         topic: KAFKA_TOPICS.USER_CREATED,
-        handler: handlers.onUserCreated,
+        handler: handlers.onUserCreated as MessageHandler<any>,
       });
     }
 
