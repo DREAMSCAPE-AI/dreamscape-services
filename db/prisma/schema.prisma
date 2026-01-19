@@ -1,7 +1,8 @@
 // Dreamscape Services - Unified PostgreSQL Schema
 generator client {
-  provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
+  provider      = "prisma-client-js"
+  output        = "../node_modules/.prisma/client"
+  binaryTargets = ["native", "windows", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -35,6 +36,7 @@ model User {
   preferences      UserPreferences?
   settings         UserSettings?
   travelOnboarding TravelOnboardingProfile?
+  history          UserHistory[]
 
   // Onboarding status
   onboardingCompleted   Boolean   @default(false)
@@ -116,6 +118,42 @@ model UserSettings {
   updatedAt DateTime @updatedAt
 
   @@map("user_settings")
+}
+
+model UserHistory {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Action performed
+  actionType  HistoryActionType
+
+  // Entity details
+  entityType  String   // "booking", "search", "favorite", "destination", "hotel", "activity"
+  entityId    String   // ID of the entity
+
+  // Additional context (flexible storage)
+  metadata    Json?    // Store search params, booking details, etc.
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+
+  // Performance indexes
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, entityType])
+  @@index([entityType, entityId])
+
+  @@map("user_history")
+}
+
+enum HistoryActionType {
+  CREATED
+  VIEWED
+  UPDATED
+  DELETED
+  SEARCHED
+  FAVORITED
+  UNFAVORITED
 }
 
 // ========== ONBOARDING SERVICE MODELS ==========
