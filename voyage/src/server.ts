@@ -110,7 +110,9 @@ function createApp(): Express {
   // Rate limiting (avant les routes)
   app.use('/api', apiLimiter);
 
-  // API routes
+  // API routes (with /v1 versioning)
+  app.use('/api/v1', routes);
+  // Keep /api for backward compatibility
   app.use('/api', routes);
 
   // Root endpoint avec informations détaillées

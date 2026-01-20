@@ -1,7 +1,8 @@
 // Dreamscape Services - Unified PostgreSQL Schema
 generator client {
-  provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
+  provider      = "prisma-client-js"
+  output        = "../node_modules/.prisma/client"
+  binaryTargets = ["native", "windows", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -36,6 +37,7 @@ model User {
   settings         UserSettings?
   travelOnboarding TravelOnboardingProfile?
   favorites        Favorite[]
+  history          UserHistory[]
 
   // Onboarding status
   onboardingCompleted   Boolean   @default(false)
@@ -117,6 +119,42 @@ model UserSettings {
   updatedAt DateTime @updatedAt
 
   @@map("user_settings")
+}
+
+model UserHistory {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Action performed
+  actionType  HistoryActionType
+
+  // Entity details
+  entityType  String   // "booking", "search", "favorite", "destination", "hotel", "activity"
+  entityId    String   // ID of the entity
+
+  // Additional context (flexible storage)
+  metadata    Json?    // Store search params, booking details, etc.
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+
+  // Performance indexes
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, entityType])
+  @@index([entityType, entityId])
+
+  @@map("user_history")
+}
+
+enum HistoryActionType {
+  CREATED
+  VIEWED
+  UPDATED
+  DELETED
+  SEARCHED
+  FAVORITED
+  UNFAVORITED
 }
 
 // ========== ONBOARDING SERVICE MODELS ==========
@@ -226,6 +264,56 @@ model Favorite {
 }
 
 // ========== VOYAGE SERVICE MODELS ==========
+model Itinerary {
+  id           String   @id @default(uuid())
+  userId       String
+  title        String
+  startDate    DateTime
+  endDate      DateTime
+  destinations String[] @default([])
+  aiGenerated  Boolean  @default(false) // Pour future intégration IA
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  items ItineraryItem[]
+
+  @@map("itineraries")
+}
+
+model ItineraryItem {
+  id          String            @id @default(uuid())
+  itineraryId String
+  itinerary   Itinerary         @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+  type        ItineraryItemType
+
+  // Cart compatibility fields
+  itemId   String? // External ID (Amadeus offer ID, booking reference, etc.)
+  itemData Json // Full cart-compatible data (FlightItemData | HotelItemData | ActivityItemData)
+  price    Decimal @db.Decimal(10, 2)
+  currency String  @default("USD")
+  quantity Int     @default(1)
+
+  // Display fields (derived from itemData for quick access)
+  title       String
+  description String?
+  startDate   DateTime
+  endDate     DateTime
+  location    String
+
+  // UI fields
+  order     Int      @default(0) // Pour drag-n-drop
+  createdAt DateTime @default(now())
+
+  @@map("itinerary_items")
+}
+
+enum ItineraryItemType {
+  FLIGHT
+  HOTEL
+  ACTIVITY
+}
+
 model FlightData {
   id            String   @id @default(cuid())
   flightNumber  String
@@ -504,4 +592,64 @@ enum RiskTolerance {
   CONSERVATIVE
   MODERATE
   ADVENTUROUS
+}
+
+// ========== PAYMENT SERVICE MODELS ==========
+model PaymentTransaction {
+  id               String @id @default(uuid())
+  paymentIntentId  String @unique
+  bookingId        String
+  bookingReference String
+  userId           String
+
+  // Payment details
+  amount   Decimal                  @db.Decimal(10, 2)
+  currency String
+  status   PaymentTransactionStatus
+
+  // Stripe details
+  paymentMethod    String?
+  stripeCustomerId String?
+
+  // Timestamps
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  confirmedAt DateTime?
+  failedAt    DateTime?
+  refundedAt  DateTime?
+
+  // Failure details
+  failureReason String?
+
+  // Metadata
+  metadata Json?
+
+  @@index([bookingId])
+  @@index([userId])
+  @@index([status])
+  @@map("payment_transactions")
+}
+
+model ProcessedWebhookEvent {
+  id          String   @id @default(uuid())
+  eventId     String   @unique // Stripe event ID
+  eventType   String
+  processed   Boolean  @default(true)
+  processedAt DateTime @default(now())
+
+  // Metadata for debugging
+  payload Json?
+
+  @@index([eventId])
+  @@index([processedAt])
+  @@map("processed_webhook_events")
+}
+
+enum PaymentTransactionStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELED
+  REFUNDED
 }

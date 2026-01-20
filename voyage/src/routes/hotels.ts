@@ -205,8 +205,8 @@ router.get('/details/:hotelId', hotelDetailsCache, async (req: Request, res: Res
     }
 
     try {
-      // Try to get hotel details using getHotelOffers API
-      const result = await AmadeusService.getHotelOffers({
+      // Try to get hotel details using searchHotels API
+      const result = await AmadeusService.searchHotels({
         hotelIds: hotelId,
         adults: parseInt(adults as string),
         roomQuantity: parseInt(roomQuantity as string),
