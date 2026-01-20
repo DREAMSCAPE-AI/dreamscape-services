@@ -8,6 +8,7 @@ import airportsRouter from './airports';
 // import healthRouter from './health'; // Temporarily disabled due to module issues
 import activitiesRouter from './activities';
 import cartRouter from './cart';
+import bookingsRouter from './bookings';
 import itinerariesRouter from './itineraries';
 
 const router = Router();
@@ -26,6 +27,7 @@ router.use('/activities', activitiesRouter);
 
 // Cart and booking flow routes
 router.use('/cart', cartRouter);
+router.use('/bookings', bookingsRouter);
 
 // Itinerary management routes
 router.use('/itineraries', itinerariesRouter);
