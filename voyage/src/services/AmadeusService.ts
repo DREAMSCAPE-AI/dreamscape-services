@@ -121,6 +121,11 @@ class AmadeusService {
           }
         });
 
+        // Log detailed error information
+        if (error.response?.data?.errors) {
+          console.error('Detailed Amadeus errors:', JSON.stringify(error.response.data.errors, null, 2));
+        }
+
         // Handle 429 rate limit errors with exponential backoff
         if (error.response?.status === 429 && this.rateLimitRetryCount < this.MAX_RETRY_ATTEMPTS) {
           this.rateLimitRetryCount++;
@@ -547,23 +552,30 @@ class AmadeusService {
         console.log('🚀 [AmadeusService] Searching activities with params:', params);
       }
 
-      const response = await this.api.get('/v1/shopping/activities', { params });
+      // Use cache wrapper to avoid repeated API calls
+      return await cacheService.cacheWrapper(
+        'activities',
+        params,
+        async () => {
+          const response = await this.api.get('/v1/shopping/activities', { params });
 
-      if (DEBUG_MODE) {
-        console.log('✅ [AmadeusService] Activities search successful');
-        console.log('📊 [AmadeusService] Response structure:', {
-          hasData: !!response.data?.data,
-          dataCount: response.data?.data?.length || 0,
-          hasMeta: !!response.data?.meta
-        });
+          if (DEBUG_MODE) {
+            console.log('✅ [AmadeusService] Activities search successful');
+            console.log('📊 [AmadeusService] Response structure:', {
+              hasData: !!response.data?.data,
+              dataCount: response.data?.data?.length || 0,
+              hasMeta: !!response.data?.meta
+            });
 
-        if (response.data?.data && response.data.data.length > 0) {
-          const firstActivity = response.data.data[0];
-          console.log('📍 [AmadeusService] First activity raw data:', JSON.stringify(firstActivity, null, 2));
+            if (response.data?.data && response.data.data.length > 0) {
+              const firstActivity = response.data.data[0];
+              console.log('📍 [AmadeusService] First activity raw data:', JSON.stringify(firstActivity, null, 2));
+            }
+          }
+
+          return response.data;
         }
-      }
-
-      return response.data;
+      );
     } catch (error) {
       console.error('❌ [AmadeusService] searchActivities error:', error);
       throw error;
