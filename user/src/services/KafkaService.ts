@@ -9,6 +9,7 @@ import {
   KAFKA_TOPICS,
   CONSUMER_GROUPS,
   createEvent,
+  type KafkaTopic,
   type UserCreatedPayload,
   type UserUpdatedPayload,
   type UserDeletedPayload,
@@ -168,19 +169,19 @@ class UserKafkaService {
       return;
     }
 
-    const subscriptions = [];
+    const subscriptions: Array<{ topic: KafkaTopic; handler: MessageHandler<any> }> = [];
 
     if (handlers.onLogin) {
       subscriptions.push({
         topic: KAFKA_TOPICS.AUTH_LOGIN,
-        handler: handlers.onLogin,
+        handler: handlers.onLogin as MessageHandler<any>,
       });
     }
 
     if (handlers.onLogout) {
       subscriptions.push({
         topic: KAFKA_TOPICS.AUTH_LOGOUT,
-        handler: handlers.onLogout,
+        handler: handlers.onLogout as MessageHandler<any>,
       });
     }
 

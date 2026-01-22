@@ -952,15 +952,6 @@ class AmadeusService {
     }
   }
 
-  async createHotelBooking(params: any): Promise<any> {
-    try {
-      const response = await this.api.post('/v1/booking/hotel-bookings', params);
-      return response.data;
-    } catch (error) {
-      throw this.handleError(error, 'Hotel booking creation failed');
-    }
-  }
-
   async getHotelList(params: {
     cityCode?: string;
     latitude?: number;

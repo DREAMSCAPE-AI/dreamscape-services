@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import {
   HealthChecker,
   ComponentType,
+  HealthStatus,
   createPostgreSQLCheck,
   createRedisCheck,
 } from '../../../shared/health';
@@ -34,8 +35,12 @@ const createHealthChecker = () => {
             const responseTime = Date.now() - startTime;
 
             return {
-              status: 'healthy' as const,
+              name: 'PostgreSQL',
+              type: ComponentType.DATABASE,
+              status: HealthStatus.HEALTHY,
               message: 'PostgreSQL connection successful',
+              responseTime,
+              timestamp: new Date(),
               details: {
                 connected: true,
                 responseTime,
@@ -44,8 +49,11 @@ const createHealthChecker = () => {
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             return {
-              status: 'unhealthy' as const,
+              name: 'PostgreSQL',
+              type: ComponentType.DATABASE,
+              status: HealthStatus.UNHEALTHY,
               message: `PostgreSQL connection failed: ${errorMessage}`,
+              timestamp: new Date(),
               details: {
                 connected: false,
                 error: errorMessage,
@@ -65,8 +73,11 @@ const createHealthChecker = () => {
             const client = redisClient.getClient();
             if (!client || !client.isReady) {
               return {
-                status: 'unhealthy' as const,
+                name: 'Redis Cache',
+                type: ComponentType.CACHE,
+                status: HealthStatus.UNHEALTHY,
                 message: 'Redis client not ready',
+                timestamp: new Date(),
                 details: {
                   connected: false,
                 },
@@ -78,8 +89,12 @@ const createHealthChecker = () => {
             const responseTime = Date.now() - startTime;
 
             return {
-              status: 'healthy' as const,
+              name: 'Redis Cache',
+              type: ComponentType.CACHE,
+              status: HealthStatus.HEALTHY,
               message: 'Redis connection successful',
+              responseTime,
+              timestamp: new Date(),
               details: {
                 connected: true,
                 responseTime,
@@ -88,8 +103,11 @@ const createHealthChecker = () => {
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             return {
-              status: 'unhealthy' as const,
+              name: 'Redis Cache',
+              type: ComponentType.CACHE,
+              status: HealthStatus.UNHEALTHY,
               message: `Redis connection failed: ${errorMessage}`,
+              timestamp: new Date(),
               details: {
                 connected: false,
                 error: errorMessage,

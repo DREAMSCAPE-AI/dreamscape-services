@@ -31,8 +31,12 @@ const createHealthChecker = () => {
             const responseTime = Date.now() - startTime;
 
             return {
+              name: 'PostgreSQL',
+              type: ComponentType.DATABASE,
               status: HealthStatus.HEALTHY,
               message: 'PostgreSQL connection successful',
+              responseTime,
+              timestamp: new Date(),
               details: {
                 connected: true,
                 responseTime,
@@ -41,8 +45,11 @@ const createHealthChecker = () => {
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             return {
+              name: 'PostgreSQL',
+              type: ComponentType.DATABASE,
               status: HealthStatus.UNHEALTHY,
               message: `PostgreSQL connection failed: ${errorMessage}`,
+              timestamp: new Date(),
               details: {
                 connected: false,
                 error: errorMessage,
@@ -65,8 +72,12 @@ const createHealthChecker = () => {
             const responseTime = Date.now() - startTime;
 
             return {
+              name: 'Uploads Directory',
+              type: ComponentType.FILESYSTEM,
               status: HealthStatus.HEALTHY,
               message: 'Uploads directory accessible',
+              responseTime,
+              timestamp: new Date(),
               details: {
                 path: 'uploads/avatars',
                 accessible: true,
@@ -76,8 +87,11 @@ const createHealthChecker = () => {
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             return {
+              name: 'Uploads Directory',
+              type: ComponentType.FILESYSTEM,
               status: HealthStatus.DEGRADED,
               message: `Uploads directory not accessible: ${errorMessage}`,
+              timestamp: new Date(),
               details: {
                 path: 'uploads/avatars',
                 accessible: false,

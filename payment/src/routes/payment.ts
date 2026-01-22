@@ -103,8 +103,16 @@ router.post('/webhook', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Get raw body (should be set by middleware)
-    const payload = (req as any).rawBody || req.body;
+    // Get raw body as Buffer (set by express.raw() middleware)
+    const payload = req.body;
+
+    if (!Buffer.isBuffer(payload)) {
+      res.status(400).json({
+        error: 'Invalid request body',
+        message: 'Webhook endpoint expects raw body',
+      });
+      return;
+    }
 
     // Process webhook
     const result = await webhookService.processWebhook(payload, signature as string);
@@ -163,6 +171,47 @@ router.post('/refund', async (req: Request, res: Response): Promise<void> => {
     console.error('[PaymentRoutes] Error processing refund:', error);
     res.status(500).json({
       error: 'Failed to process refund',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * PUT /api/v1/payment/update-metadata
+ * Update Payment Intent metadata (e.g., with real booking reference after booking creation)
+ *
+ * Request body:
+ * {
+ *   paymentIntentId: string,
+ *   metadata: {
+ *     bookingId: string,
+ *     bookingReference: string,
+ *     userId: string
+ *   }
+ * }
+ */
+router.put('/update-metadata', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { paymentIntentId, metadata } = req.body;
+
+    if (!paymentIntentId || !metadata) {
+      res.status(400).json({
+        error: 'Missing required fields',
+        required: ['paymentIntentId', 'metadata'],
+      });
+      return;
+    }
+
+    await paymentService.updatePaymentIntentMetadata(paymentIntentId, metadata);
+
+    res.status(200).json({
+      success: true,
+      message: 'Payment intent metadata updated successfully',
+    });
+  } catch (error) {
+    console.error('[PaymentRoutes] Error updating payment intent metadata:', error);
+    res.status(500).json({
+      error: 'Failed to update payment intent metadata',
       message: error instanceof Error ? error.message : 'Unknown error',
     });
   }
