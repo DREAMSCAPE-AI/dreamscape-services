@@ -223,12 +223,31 @@ class AmadeusService {
     if (error.response) {
       const status = error.response.status;
       const data = error.response.data;
-      
-      // Handle specific error cases
+
+      // Check for Amadeus-specific error codes
+      const amadeusError = data?.errors?.[0];
+      const errorCode = amadeusError?.code;
+
+      // Amadeus error code mapping
+      if (errorCode === 141) {
+        return new Error(`Amadeus system error (code 141). This is a temporary issue on Amadeus side. Please try again later or use different search parameters. Context: ${context}`);
+      } else if (errorCode === 38195) {
+        return new Error(`Amadeus quota exceeded (code 38195). Monthly API limit reached. Context: ${context}`);
+      } else if (errorCode === 38194) {
+        return new Error(`Amadeus rate limit (code 38194). Too many requests per second. Context: ${context}`);
+      } else if (errorCode === 477) {
+        return new Error(`No flight offers found for the given criteria. Try different dates or destinations. Context: ${context}`);
+      } else if (errorCode === 4926) {
+        return new Error(`Invalid date format or date in the past. Context: ${context}`);
+      } else if (errorCode === 32171) {
+        return new Error(`Invalid location code. Context: ${context}`);
+      }
+
+      // Handle HTTP status codes
       if (status === 429) {
         return new Error(`Rate limit exceeded. Please try again later. Context: ${context}`);
       } else if (status === 400) {
-        const errorMessage = data?.errors?.[0]?.detail || data?.error_description || 'Invalid request parameters';
+        const errorMessage = amadeusError?.detail || amadeusError?.title || data?.error_description || 'Invalid request parameters';
         return new Error(`Bad Request: ${errorMessage}. Context: ${context}`);
       } else if (status === 401) {
         return new Error(`Authentication failed. Context: ${context}`);
@@ -237,7 +256,7 @@ class AmadeusService {
       } else if (status >= 500) {
         return new Error(`Server error (${status}). Context: ${context}`);
       }
-      
+
       return new Error(`API Error (${status}): ${data?.message || error.message}. Context: ${context}`);
     } else if (error.request) {
       return new Error(`Network error: No response received. Context: ${context}`);
