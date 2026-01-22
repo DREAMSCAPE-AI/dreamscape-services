@@ -11,6 +11,7 @@ import profileRoutes from './routes/profile';
 import healthRoutes from './routes/health';
 import onboardingRoutes from '@routes/onboarding';
 import aiIntegrationRoutes from '@routes/aiIntegration';
+import favoritesRoutes from './routes/favorites';
 import historyRoutes from '@routes/history';
 import { apiLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/errorHandler';
@@ -66,6 +67,7 @@ app.use('/api/v1/users/profile', profileRoutes);
 app.use('/api/v1/users/onboarding', onboardingRoutes);
 app.use('/api/v1/users/history', historyRoutes);
 app.use('/api/v1/ai', aiIntegrationRoutes);
+app.use('/api/v1/users/favorites', favoritesRoutes);
 
 // Health check routes - INFRA-013.1
 app.use('/health', healthRoutes);

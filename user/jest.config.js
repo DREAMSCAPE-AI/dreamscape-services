@@ -27,6 +27,8 @@ module.exports = {
     '!src/**/*.d.ts',
     '!src/**/*.test.ts',
     '!src/**/*.spec.ts',
+    '!src/**/*.interface.ts',
+    '!src/**/*.type.ts',
     '!src/types/**',
     '!src/server.ts'
   ],
