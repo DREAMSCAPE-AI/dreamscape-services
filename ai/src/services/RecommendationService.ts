@@ -6,6 +6,7 @@
 import { PrismaClient, Recommendation, RecommendationStatus } from '@dreamscape/db';
 import ScoringService from './ScoringService';
 import VectorizationService from './VectorizationService';
+import CacheService from './CacheService';
 
 const prisma = new PrismaClient();
 
@@ -98,6 +99,7 @@ export class RecommendationService {
 
   /**
    * Get active recommendations for a user
+   * Uses Redis cache for performance < 500ms
    */
   async getActiveRecommendations(
     userId: string,
@@ -109,7 +111,16 @@ export class RecommendationService {
   ): Promise<Recommendation[]> {
     const { limit = 10, status, includeItemVector = false } = options;
 
-    return await prisma.recommendation.findMany({
+    // Try cache first for performance
+    if (!status && !includeItemVector) {
+      const cached = await CacheService.getRecommendations(userId);
+      if (cached && cached.length > 0) {
+        return cached.slice(0, limit);
+      }
+    }
+
+    // Query database
+    const recommendations = await prisma.recommendation.findMany({
       where: {
         userId,
         isActive: true,
@@ -124,6 +135,13 @@ export class RecommendationService {
         },
       }),
     });
+
+    // Cache for future requests
+    if (!status && !includeItemVector && recommendations.length > 0) {
+      await CacheService.setRecommendations(userId, recommendations);
+    }
+
+    return recommendations;
   }
 
   /**
