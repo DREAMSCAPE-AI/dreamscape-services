@@ -24,6 +24,8 @@ interface UpdateTransactionData {
   failedAt?: Date;
   refundedAt?: Date;
   failureReason?: string;
+  bookingId?: string;
+  bookingReference?: string;
 }
 
 class DatabaseService {

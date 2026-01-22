@@ -393,6 +393,34 @@ router.post('/checkout', async (req: Request, res: Response): Promise<void> => {
 
     console.log(`✅ [CartRoutes] Booking created: ${booking.reference} with Payment Intent: ${paymentIntent.paymentIntentId}`);
 
+    // Step 3: Update Payment Intent metadata with real booking reference
+    // This is critical for the webhook to find the correct booking
+    try {
+      const updateMetadataResponse = await fetch(`${PAYMENT_SERVICE_URL}/api/v1/payment/update-metadata`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          paymentIntentId: paymentIntent.paymentIntentId,
+          metadata: {
+            bookingId: booking.reference,
+            bookingReference: booking.reference,
+            userId,
+          },
+        }),
+      });
+
+      if (updateMetadataResponse.ok) {
+        console.log(`✅ [CartRoutes] Payment Intent metadata updated with booking reference: ${booking.reference}`);
+      } else {
+        console.warn(`⚠️ [CartRoutes] Failed to update Payment Intent metadata - webhook may not work correctly`);
+      }
+    } catch (updateError) {
+      console.warn(`⚠️ [CartRoutes] Failed to update Payment Intent metadata:`, updateError);
+      // Don't fail checkout - the booking is created, we'll handle confirmation via direct endpoint
+    }
+
     const bookingData = booking.data as unknown as BookingDataPayload;
 
     res.json({
