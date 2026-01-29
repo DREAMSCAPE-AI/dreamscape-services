@@ -1,220 +1,399 @@
+/**
+ * IA-001: AI Recommendation System Routes
+ * Provides personalized destination recommendations using ML-based scoring
+ */
+
 import { Router, Request, Response } from 'express';
+import RecommendationService from '@/services/RecommendationService';
+import VectorizationService from '@/services/VectorizationService';
+import ScoringService from '@/services/ScoringService';
+import AnalyticsService from '@/services/AnalyticsService';
 
 const router = Router();
 
 /**
- * DR-204: API endpoints for VR activity recommendations
- * Provides personalized, trending, and deals recommendations for VR integration
+ * POST /api/v1/recommendations/generate
+ * Generate new recommendations for a user
+ * IA-001.3, IA-001.4
  */
+router.post('/generate', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId, contextType = 'general', limit = 10, minScore = 0.3 } = req.body;
 
-// Mock data for activity recommendations
-// TODO: Replace with real AI-powered recommendations from database
-const getMockRecommendations = (type: 'personalized' | 'trending' | 'deals' = 'personalized') => {
-  const baseRecommendations = [
-    {
-      id: 'rec-1',
-      type: 'activity',
-      title: 'Croisière sur la Seine',
-      description: 'Vue panoramique de Paris depuis l\'eau avec dîner romantique',
-      location: 'Paris, France',
-      coordinates: { lat: 48.8566, lon: 2.3522 },
-      price: 89,
-      currency: '€',
-      rating: 4.8,
-      reviewCount: 1245,
-      image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34',
-      tags: ['romantic', 'sightseeing', 'dinner'],
-      confidence: 0.92,
-      duration: '2 hours',
-      category: 'cruise'
-    },
-    {
-      id: 'rec-2',
-      type: 'destination',
-      title: 'Tour Eiffel & Musée du Louvre',
-      description: 'Pack découverte des monuments emblématiques de Paris',
-      location: 'Paris, France',
-      coordinates: { lat: 48.8584, lon: 2.2945 },
-      price: 135,
-      currency: '€',
-      rating: 4.9,
-      reviewCount: 3421,
-      image: 'https://images.unsplash.com/photo-1511739001486-6bfe10ce785f',
-      tags: ['culture', 'architecture', 'history'],
-      confidence: 0.95,
-      duration: '1 day',
-      category: 'landmark'
-    },
-    {
-      id: 'rec-3',
-      type: 'activity',
-      title: 'Visite guidée du quartier gothique',
-      description: 'Explorez les ruelles médiévales de Barcelone',
-      location: 'Barcelona, Spain',
-      coordinates: { lat: 41.3851, lon: 2.1734 },
-      price: 45,
-      currency: '€',
-      rating: 4.7,
-      reviewCount: 892,
-      image: 'https://images.unsplash.com/photo-1562883676-8c7feb83f09b',
-      tags: ['history', 'walking-tour', 'culture'],
-      confidence: 0.88,
-      duration: '3 hours',
-      category: 'tour'
-    },
-    {
-      id: 'rec-4',
-      type: 'activity',
-      title: 'Cours de cuisine catalane',
-      description: 'Apprenez à préparer des tapas authentiques avec un chef local',
-      location: 'Barcelona, Spain',
-      coordinates: { lat: 41.3874, lon: 2.1686 },
-      price: 75,
-      currency: '€',
-      rating: 4.9,
-      reviewCount: 567,
-      image: 'https://images.unsplash.com/photo-1556910103-1c02745aae4d',
-      tags: ['food', 'cooking', 'local-experience'],
-      confidence: 0.85,
-      duration: '4 hours',
-      category: 'culinary'
-    },
-    {
-      id: 'rec-5',
-      type: 'destination',
-      title: 'Sagrada Familia & Park Güell',
-      description: 'Découvrez les chefs-d\'œuvre de Gaudí',
-      location: 'Barcelona, Spain',
-      coordinates: { lat: 41.4036, lon: 2.1744 },
-      price: 95,
-      currency: '€',
-      rating: 5.0,
-      reviewCount: 4523,
-      image: 'https://images.unsplash.com/photo-1583422409516-2895a77efded',
-      tags: ['architecture', 'art', 'gaudi'],
-      confidence: 0.98,
-      duration: '1 day',
-      category: 'landmark'
-    },
-    {
-      id: 'rec-6',
-      type: 'activity',
-      title: 'Vélo électrique au bord de la plage',
-      description: 'Tour guidé le long de la côte barcelonaise',
-      location: 'Barcelona, Spain',
-      coordinates: { lat: 41.3808, lon: 2.1904 },
-      price: 35,
-      currency: '€',
-      rating: 4.6,
-      reviewCount: 234,
-      image: 'https://images.unsplash.com/photo-1559827260-dc66d52bef19',
-      tags: ['outdoor', 'beach', 'active'],
-      confidence: 0.79,
-      duration: '2 hours',
-      category: 'outdoor'
+    if (!userId) {
+      res.status(400).json({ error: 'userId is required' });
+      return;
     }
-  ];
 
-  if (type === 'trending') {
-    return baseRecommendations.slice(0, 4).map(rec => ({
-      ...rec,
-      trending: true,
-      bookings_last_week: Math.floor(Math.random() * 500) + 100
-    }));
+    // Generate recommendations
+    const recommendations = await RecommendationService.generateRecommendations(userId, {
+      limit,
+      contextType,
+      minScore,
+    });
+
+    res.json({
+      userId,
+      count: recommendations.length,
+      recommendations,
+    });
+  } catch (error) {
+    console.error('Generate recommendations error:', error);
+    res.status(500).json({
+      error: 'Failed to generate recommendations',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
   }
-
-  if (type === 'deals') {
-    return baseRecommendations.slice(2, 5).map(rec => ({
-      ...rec,
-      originalPrice: rec.price * 1.4,
-      discount: 30,
-      dealExpiry: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-    }));
-  }
-
-  return baseRecommendations;
-};
+});
 
 /**
  * GET /api/v1/recommendations/personalized
- * Returns personalized activity recommendations based on user preferences
- * DR-204: VR-005.1
+ * Returns personalized recommendations (active) for a user
+ * IA-001.4: Replaces the old mock implementation
  */
 router.get('/personalized', async (req: Request, res: Response): Promise<void> => {
   try {
     // TODO: Get userId from JWT token in Authorization header
-    // TODO: Fetch user preferences from database
-    // TODO: Use AI model to generate personalized recommendations
+    const { userId, limit = '10', status, includeItemVector = 'false' } = req.query;
 
-    const { location, limit = '10' } = req.query;
-
-    let recommendations = getMockRecommendations('personalized');
-
-    // Filter by location if provided
-    if (location && typeof location === 'string') {
-      recommendations = recommendations.filter(rec =>
-        rec.location.toLowerCase().includes(location.toLowerCase())
-      );
+    if (!userId || typeof userId !== 'string') {
+      res.status(400).json({ error: 'userId query parameter is required' });
+      return;
     }
 
-    // Apply limit
     const limitNum = parseInt(limit as string, 10);
-    recommendations = recommendations.slice(0, limitNum);
+    const includeVector = includeItemVector === 'true';
 
-    res.json(recommendations);
+    // Get active recommendations
+    let recommendations = await RecommendationService.getActiveRecommendations(userId, {
+      limit: limitNum,
+      status: status as any,
+      includeItemVector: includeVector,
+    });
+
+    // If no recommendations exist, generate them
+    if (recommendations.length === 0) {
+      console.log(`No recommendations found for user ${userId}, generating...`);
+      recommendations = await RecommendationService.generateRecommendations(userId, {
+        limit: limitNum,
+        contextType: 'general',
+      });
+    }
+
+    res.json({
+      userId,
+      count: recommendations.length,
+      recommendations,
+    });
   } catch (error) {
     console.error('Personalized recommendations error:', error);
     res.status(500).json({
       error: 'Failed to get personalized recommendations',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/recommendations/:id/track
+ * Track user interaction with a recommendation
+ * IA-001.4
+ */
+router.post('/:id/track', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { action, rating } = req.body;
+
+    if (!action || !['viewed', 'clicked', 'booked', 'rejected'].includes(action)) {
+      res.status(400).json({
+        error: 'Invalid action. Must be one of: viewed, clicked, booked, rejected',
+      });
+      return;
+    }
+
+    const recommendation = await RecommendationService.trackInteraction(id, {
+      action,
+      rating,
+    });
+
+    res.json({
+      success: true,
+      recommendation,
+    });
+  } catch (error) {
+    console.error('Track interaction error:', error);
+    res.status(500).json({
+      error: 'Failed to track interaction',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/recommendations/refresh
+ * Refresh user vector and regenerate recommendations
+ * IA-001.2, IA-001.4
+ */
+router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      res.status(400).json({ error: 'userId is required' });
+      return;
+    }
+
+    const recommendations = await RecommendationService.refreshUserRecommendations(userId);
+
+    res.json({
+      success: true,
+      userId,
+      count: recommendations.length,
+      recommendations,
+    });
+  } catch (error) {
+    console.error('Refresh recommendations error:', error);
+    res.status(500).json({
+      error: 'Failed to refresh recommendations',
+      message: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });
 
 /**
  * GET /api/v1/recommendations/trending
- * Returns trending destinations and activities
- * DR-204: VR-005.1
+ * Returns trending destinations based on popularity and recent bookings
+ * IA-001.3
  */
 router.get('/trending', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { limit = '6' } = req.query;
-
-    let recommendations = getMockRecommendations('trending');
-
+    const { limit = '10' } = req.query;
     const limitNum = parseInt(limit as string, 10);
-    recommendations = recommendations.slice(0, limitNum);
 
-    res.json(recommendations);
+    const trending = await ScoringService.getTrendingDestinations(limitNum);
+
+    res.json({
+      count: trending.length,
+      destinations: trending,
+    });
   } catch (error) {
-    console.error('Trending recommendations error:', error);
+    console.error('Trending destinations error:', error);
     res.status(500).json({
-      error: 'Failed to get trending recommendations',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Failed to get trending destinations',
+      message: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });
 
 /**
+ * GET /api/v1/recommendations/similar/:destinationId
+ * Get similar destinations based on vector similarity
+ * IA-001.3
+ */
+router.get('/similar/:destinationId', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { destinationId } = req.params;
+    const { limit = '5' } = req.query;
+    const limitNum = parseInt(limit as string, 10);
+
+    const similar = await RecommendationService.getSimilarDestinations(
+      destinationId,
+      limitNum
+    );
+
+    res.json({
+      destinationId,
+      count: similar.length,
+      similar,
+    });
+  } catch (error) {
+    console.error('Similar destinations error:', error);
+    res.status(500).json({
+      error: 'Failed to get similar destinations',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/recommendations/analytics
+ * Get analytics and metrics for the recommendation system
+ * IA-001.4
+ */
+router.get('/analytics', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId, type = 'dashboard', from, to } = req.query;
+
+    const dateRange =
+      from && to
+        ? {
+            from: new Date(from as string),
+            to: new Date(to as string),
+          }
+        : undefined;
+
+    let result;
+
+    switch (type) {
+      case 'dashboard':
+        result = await AnalyticsService.getDashboardSummary();
+        break;
+
+      case 'metrics':
+        result = await AnalyticsService.getOverallMetrics(dateRange);
+        break;
+
+      case 'destinations':
+        result = await AnalyticsService.getDestinationPerformance({
+          dateRange,
+          limit: 20,
+        });
+        break;
+
+      case 'user':
+        if (userId && typeof userId === 'string') {
+          result = await AnalyticsService.getUserEngagement(userId, dateRange);
+        } else {
+          result = await AnalyticsService.getUserEngagement(undefined, dateRange);
+        }
+        break;
+
+      case 'reasons':
+        result = await AnalyticsService.getReasonAnalysis(dateRange);
+        break;
+
+      case 'context':
+        result = await AnalyticsService.getContextTypeComparison(dateRange);
+        break;
+
+      default:
+        res.status(400).json({
+          error: 'Invalid type. Must be one of: dashboard, metrics, destinations, user, reasons, context',
+        });
+        return;
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Analytics error:', error);
+    res.status(500).json({
+      error: 'Failed to get analytics',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/recommendations/vectors/user
+ * Create or update user vector from onboarding data
+ * IA-001.2
+ */
+router.post('/vectors/user', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId, source = 'onboarding' } = req.body;
+
+    if (!userId) {
+      res.status(400).json({ error: 'userId is required' });
+      return;
+    }
+
+    await VectorizationService.saveUserVector(userId, source);
+    const vector = await VectorizationService.getUserVector(userId);
+
+    res.json({
+      success: true,
+      userId,
+      vector,
+      dimensions: vector.length,
+    });
+  } catch (error) {
+    console.error('Create user vector error:', error);
+    res.status(500).json({
+      error: 'Failed to create user vector',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/recommendations/vectors/user/:userId
+ * Get user vector
+ * IA-001.2
+ */
+router.get('/vectors/user/:userId', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId } = req.params;
+
+    const vector = await VectorizationService.getUserVector(userId);
+
+    res.json({
+      userId,
+      vector,
+      dimensions: vector.length,
+    });
+  } catch (error) {
+    console.error('Get user vector error:', error);
+    res.status(500).json({
+      error: 'Failed to get user vector',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/recommendations/cleanup
+ * Manually trigger cleanup of expired recommendations
+ * IA-001.4
+ */
+router.post('/cleanup', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const count = await RecommendationService.cleanupExpiredRecommendations();
+
+    res.json({
+      success: true,
+      expiredCount: count,
+    });
+  } catch (error) {
+    console.error('Cleanup error:', error);
+    res.status(500).json({
+      error: 'Failed to cleanup expired recommendations',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// Legacy endpoints for backward compatibility (DR-204)
+
+/**
  * GET /api/v1/recommendations/deals
  * Returns current deals and special offers
- * DR-204: VR-005.1
+ * Legacy endpoint - now filters by high-scoring seasonal recommendations
  */
 router.get('/deals', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { limit = '5' } = req.query;
+    const { userId, limit = '5' } = req.query;
 
-    let recommendations = getMockRecommendations('deals');
+    if (!userId || typeof userId !== 'string') {
+      // Fallback to trending for anonymous users
+      const trending = await ScoringService.getTrendingDestinations(
+        parseInt(limit as string, 10)
+      );
+      res.json(trending);
+      return;
+    }
 
+    // Get seasonal recommendations (high scores during current season)
     const limitNum = parseInt(limit as string, 10);
-    recommendations = recommendations.slice(0, limitNum);
+    const recommendations = await RecommendationService.getActiveRecommendations(userId, {
+      limit: limitNum,
+    });
 
     res.json(recommendations);
   } catch (error) {
     console.error('Deals recommendations error:', error);
     res.status(500).json({
       error: 'Failed to get deals',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      message: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });
@@ -222,38 +401,35 @@ router.get('/deals', async (req: Request, res: Response): Promise<void> => {
 /**
  * GET /api/v1/recommendations/activities/:location
  * Returns activity recommendations for a specific location
- * DR-204: VR-005.1 - Specific endpoint for VR hotspot integration
+ * Legacy endpoint - enhanced with AI recommendations
  */
 router.get('/activities/:location', async (req: Request, res: Response): Promise<void> => {
   try {
     const { location } = req.params;
-    const { type, limit = '10' } = req.query;
+    const { userId, type, limit = '10' } = req.query;
 
-    let recommendations = getMockRecommendations('personalized');
+    // Search for destinations matching the location
+    const destinations = await ScoringService.getDestinationsByCriteria({
+      type: type as string,
+      limit: parseInt(limit as string, 10),
+    });
 
-    // Filter by location
-    recommendations = recommendations.filter(rec =>
-      rec.location.toLowerCase().includes(location.toLowerCase())
+    // Filter by location name
+    const filtered = destinations.filter(dest =>
+      dest.name.toLowerCase().includes(location.toLowerCase()) ||
+      dest.country?.toLowerCase().includes(location.toLowerCase())
     );
-
-    // Filter by activity type if provided
-    if (type && typeof type === 'string') {
-      recommendations = recommendations.filter(rec => rec.category === type);
-    }
-
-    const limitNum = parseInt(limit as string, 10);
-    recommendations = recommendations.slice(0, limitNum);
 
     res.json({
       location,
-      count: recommendations.length,
-      activities: recommendations
+      count: filtered.length,
+      activities: filtered,
     });
   } catch (error) {
     console.error('Activity recommendations error:', error);
     res.status(500).json({
       error: 'Failed to get activity recommendations',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      message: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });

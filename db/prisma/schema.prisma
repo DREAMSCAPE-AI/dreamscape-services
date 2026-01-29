@@ -43,6 +43,10 @@ model User {
   onboardingCompleted   Boolean   @default(false)
   onboardingCompletedAt DateTime?
 
+  // AI Recommendation System (IA-001.1)
+  userVector      UserVector?
+  recommendations Recommendation[]
+
   @@map("users")
 }
 
@@ -453,6 +457,141 @@ model SearchHistory {
   @@map("search_history")
 }
 
+// ========== AI RECOMMENDATION SYSTEM MODELS (IA-001.1) ==========
+
+/// User preference vector for personalized recommendations
+/// Stores user preferences as a feature vector for ML-based scoring
+model UserVector {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Feature vector (JSON array of normalized floats [0-1])
+  vector    Json // Example: [0.8, 0.3, 0.95, ...] representing preferences across dimensions
+
+  // Metadata for traceability
+  version   Int      @default(1) // Vectorization model version
+  source    String   @default("onboarding") // onboarding, behavior, hybrid
+
+  // Usage statistics
+  usageCount     Int      @default(0) // Number of times used for scoring
+  lastUsedAt     DateTime?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  recommendations Recommendation[]
+
+  @@map("user_vectors")
+  @@index([userId])
+  @@index([updatedAt]) // For identifying stale vectors
+}
+
+/// Destination/item feature vector for recommendation matching
+/// Pre-computed characteristics of destinations for fast similarity scoring
+model ItemVector {
+  id             String   @id @default(cuid())
+
+  // Flexible destination identifier
+  destinationId  String // IATA code, city code, or LocationData.id
+  destinationType String // "city", "airport", "poi", "region"
+
+  // Basic information for display
+  name           String
+  country        String?
+  coordinates    Json? // {lat: number, lon: number}
+
+  // Feature vector (aligned with UserVector dimensions)
+  vector         Json // Example: [0.7, 0.5, 0.9, ...] representing destination characteristics
+
+  // Metadata
+  version        Int      @default(1)
+
+  // Pre-computed popularity statistics
+  popularityScore Float   @default(0) // Aggregated popularity score
+  bookingCount    Int     @default(0) // Number of bookings
+  searchCount     Int     @default(0) // Number of searches
+
+  // Seasonality (optional, can be JSON)
+  seasonalityData Json? // {summer: 0.8, winter: 0.3, spring: 0.6, autumn: 0.5}
+
+  // Timestamps
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  lastSyncedAt   DateTime @default(now()) // Last sync with external APIs (Amadeus)
+
+  // Relations
+  recommendations Recommendation[]
+
+  @@map("item_vectors")
+  @@unique([destinationId, destinationType])
+  @@index([destinationType])
+  @@index([popularityScore])
+  @@index([updatedAt])
+}
+
+/// Recommendation history and cache
+/// Tracks generated recommendations, user interactions, and feedback
+model Recommendation {
+  id             String   @id @default(cuid())
+
+  // Relations
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  userVectorId   String?
+  userVector     UserVector? @relation(fields: [userVectorId], references: [id], onDelete: SetNull)
+
+  itemVectorId   String?
+  itemVector     ItemVector? @relation(fields: [itemVectorId], references: [id], onDelete: SetNull)
+
+  // Recommended destination (denormalized for performance)
+  destinationId   String
+  destinationName String
+  destinationType String
+
+  // Scoring
+  score           Float // Recommendation score [0-1]
+  confidence      Float? // Confidence level [0-1]
+
+  // Explainability (why this recommendation?)
+  reasons         Json? // ["matches_climate_preference", "popular_destination", "budget_aligned"]
+
+  // Generation context
+  contextType     String   @default("general") // "general", "onboarding", "search_based", "seasonal"
+  contextData     Json? // Parameters that influenced the recommendation
+
+  // Interaction status
+  status          RecommendationStatus @default(GENERATED)
+
+  // User tracking
+  viewedAt        DateTime?
+  clickedAt       DateTime?
+  bookedAt        DateTime?
+  rejectedAt      DateTime?
+
+  // Explicit feedback (optional)
+  userRating      Int? // 1-5 stars if user provides feedback
+
+  // TTL and expiration
+  expiresAt       DateTime // Recommendation expiration date
+  isActive        Boolean  @default(true)
+
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("recommendations")
+  @@index([userId, isActive])
+  @@index([userId, status])
+  @@index([destinationId])
+  @@index([expiresAt])
+  @@index([score(sort: Desc)]) // For top recommendations
+  @@index([createdAt])
+}
+
 // ========== ENUMS ==========
 enum FavoriteType {
   FLIGHT
@@ -652,4 +791,13 @@ enum PaymentTransactionStatus {
   FAILED
   CANCELED
   REFUNDED
+}
+
+enum RecommendationStatus {
+  GENERATED // Generated but not viewed
+  VIEWED    // Viewed by user
+  CLICKED   // Clicked (opened details)
+  BOOKED    // Booking made
+  REJECTED  // Explicitly rejected
+  EXPIRED   // Expired (TTL exceeded)
 }
