@@ -4,7 +4,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
-import { DatabaseService } from '@/database/DatabaseService';
+import { prisma } from '@dreamscape/db';
 import recommendationsRoutes from '@/routes/recommendations';
 // import predictionsRoutes from '@/routes/predictions'; // TODO: Fix AmadeusService import
 import healthRoutes from '@/routes/health';
@@ -65,7 +65,7 @@ app.use('*', (req, res) => {
 const startServer = async () => {
   try {
     // Initialize database
-    await DatabaseService.connect();
+    await prisma.$connect();
     console.log('✅ Database connected successfully');
 
     // Initialize Kafka and subscribe to events - DR-387
@@ -98,7 +98,7 @@ const startServer = async () => {
         console.log('✅ Kafka disconnected');
 
         // Disconnect database
-        await DatabaseService.disconnect();
+        await prisma.$disconnect();
         console.log('✅ Database disconnected');
 
         process.exit(0);

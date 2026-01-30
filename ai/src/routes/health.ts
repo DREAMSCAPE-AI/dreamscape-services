@@ -4,8 +4,7 @@ import {
   ComponentType,
   HealthStatus,
 } from '../../../shared/health';
-import { DatabaseService } from '../database/DatabaseService';
-import prisma from '../database/prisma';
+import prisma from '@dreamscape/db';
 
 const router = Router();
 
