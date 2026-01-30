@@ -295,6 +295,37 @@ class PaymentService {
   }
 
   /**
+   * Update Payment Intent metadata
+   * Called after booking creation to set the real booking reference
+   */
+  async updatePaymentIntentMetadata(
+    paymentIntentId: string,
+    metadata: { bookingId: string; bookingReference: string; userId: string }
+  ): Promise<void> {
+    try {
+      console.log(`[PaymentService] Updating metadata for payment intent: ${paymentIntentId}`);
+
+      await stripeService.updatePaymentIntentMetadata(paymentIntentId, metadata);
+
+      // Also update in database if exists
+      try {
+        await databaseService.updateTransaction(paymentIntentId, {
+          bookingId: metadata.bookingId,
+          bookingReference: metadata.bookingReference,
+        });
+      } catch (dbError) {
+        console.warn(`[PaymentService] Failed to update DB record for ${paymentIntentId}:`, dbError);
+        // Don't throw - Stripe update is the critical one
+      }
+
+      console.log(`✅ [PaymentService] Metadata updated for payment intent: ${paymentIntentId}`);
+    } catch (error) {
+      console.error(`[PaymentService] Error updating payment intent metadata:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Get publishable key for frontend
    */
   getPublishableKey(): string {

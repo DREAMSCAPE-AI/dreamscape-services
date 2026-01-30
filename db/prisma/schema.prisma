@@ -1,7 +1,8 @@
 // Dreamscape Services - Unified PostgreSQL Schema
 generator client {
-  provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
+  provider      = "prisma-client-js"
+  output        = "../node_modules/.prisma/client"
+  binaryTargets = ["native", "windows", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -35,10 +36,16 @@ model User {
   preferences      UserPreferences?
   settings         UserSettings?
   travelOnboarding TravelOnboardingProfile?
+  favorites        Favorite[]
+  history          UserHistory[]
 
   // Onboarding status
   onboardingCompleted   Boolean   @default(false)
   onboardingCompletedAt DateTime?
+
+  // AI Recommendation System (IA-001.1)
+  userVector      UserVector?
+  recommendations Recommendation[]
 
   @@map("users")
 }
@@ -116,6 +123,42 @@ model UserSettings {
   updatedAt DateTime @updatedAt
 
   @@map("user_settings")
+}
+
+model UserHistory {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Action performed
+  actionType  HistoryActionType
+
+  // Entity details
+  entityType  String   // "booking", "search", "favorite", "destination", "hotel", "activity"
+  entityId    String   // ID of the entity
+
+  // Additional context (flexible storage)
+  metadata    Json?    // Store search params, booking details, etc.
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+
+  // Performance indexes
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, entityType])
+  @@index([entityType, entityId])
+
+  @@map("user_history")
+}
+
+enum HistoryActionType {
+  CREATED
+  VIEWED
+  UPDATED
+  DELETED
+  SEARCHED
+  FAVORITED
+  UNFAVORITED
 }
 
 // ========== ONBOARDING SERVICE MODELS ==========
@@ -200,6 +243,28 @@ model TravelOnboardingProfile {
   updatedAt DateTime @updatedAt
 
   @@map("travel_onboarding_profiles")
+}
+
+model Favorite {
+  id          String       @id @default(uuid())
+  userId      String
+  entityType  FavoriteType
+  entityId    String       // Reference to external entity (flight ID, hotel ID, etc.)
+  entityData  Json?        // Cached data for offline/quick display
+  category    String?      // Optional user-defined category for organization
+  notes       String?      // Optional user notes
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Indexes for performance
+  @@unique([userId, entityType, entityId]) // Prevent duplicate favorites
+  @@index([userId, createdAt(sort: Desc)]) // List user favorites chronologically
+  @@index([userId, entityType]) // Filter by category
+  @@index([userId, entityId]) // Check if specific item is favorited
+  @@map("favorites")
 }
 
 // ========== VOYAGE SERVICE MODELS ==========
@@ -392,7 +457,157 @@ model SearchHistory {
   @@map("search_history")
 }
 
+// ========== AI RECOMMENDATION SYSTEM MODELS (IA-001.1) ==========
+
+/// User preference vector for personalized recommendations
+/// Stores user preferences as a feature vector for ML-based scoring
+model UserVector {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Feature vector (JSON array of normalized floats [0-1])
+  vector    Json // Example: [0.8, 0.3, 0.95, ...] representing preferences across dimensions
+
+  // Metadata for traceability
+  version   Int      @default(1) // Vectorization model version
+  source    String   @default("onboarding") // onboarding, behavior, hybrid
+
+  // User segmentation (IA-002.1)
+  segments           Json?     // Array of {segment: string, score: number, reasons: string[], assignedAt: Date}
+  primarySegment     String?   // Main segment (e.g., "FAMILY_EXPLORER", "BUDGET_BACKPACKER")
+  segmentConfidence  Float?    // Confidence score [0-1] for segment assignment
+  lastSegmentUpdate  DateTime? // When segments were last recalculated
+
+  // Usage statistics
+  usageCount     Int      @default(0) // Number of times used for scoring
+  lastUsedAt     DateTime?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  recommendations Recommendation[]
+
+  @@map("user_vectors")
+  @@index([userId])
+  @@index([updatedAt]) // For identifying stale vectors
+  @@index([primarySegment]) // For segment-based queries (IA-002.1)
+}
+
+/// Destination/item feature vector for recommendation matching
+/// Pre-computed characteristics of destinations for fast similarity scoring
+model ItemVector {
+  id             String   @id @default(cuid())
+
+  // Flexible destination identifier
+  destinationId  String // IATA code, city code, or LocationData.id
+  destinationType String // "city", "airport", "poi", "region"
+
+  // Basic information for display
+  name           String
+  country        String?
+  coordinates    Json? // {lat: number, lon: number}
+
+  // Feature vector (aligned with UserVector dimensions)
+  vector         Json // Example: [0.7, 0.5, 0.9, ...] representing destination characteristics
+
+  // Metadata
+  version        Int      @default(1)
+
+  // Pre-computed popularity statistics
+  popularityScore Float   @default(0) // Aggregated popularity score
+  bookingCount    Int     @default(0) // Number of bookings
+  searchCount     Int     @default(0) // Number of searches
+
+  // Seasonality (optional, can be JSON)
+  seasonalityData Json? // {summer: 0.8, winter: 0.3, spring: 0.6, autumn: 0.5}
+
+  // Timestamps
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  lastSyncedAt   DateTime @default(now()) // Last sync with external APIs (Amadeus)
+
+  // Relations
+  recommendations Recommendation[]
+
+  @@map("item_vectors")
+  @@unique([destinationId, destinationType])
+  @@index([destinationType])
+  @@index([popularityScore])
+  @@index([updatedAt])
+}
+
+/// Recommendation history and cache
+/// Tracks generated recommendations, user interactions, and feedback
+model Recommendation {
+  id             String   @id @default(cuid())
+
+  // Relations
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  userVectorId   String?
+  userVector     UserVector? @relation(fields: [userVectorId], references: [id], onDelete: SetNull)
+
+  itemVectorId   String?
+  itemVector     ItemVector? @relation(fields: [itemVectorId], references: [id], onDelete: SetNull)
+
+  // Recommended destination (denormalized for performance)
+  destinationId   String
+  destinationName String
+  destinationType String
+
+  // Scoring
+  score           Float // Recommendation score [0-1]
+  confidence      Float? // Confidence level [0-1]
+
+  // Explainability (why this recommendation?)
+  reasons         Json? // ["matches_climate_preference", "popular_destination", "budget_aligned"]
+
+  // Generation context
+  contextType     String   @default("general") // "general", "onboarding", "search_based", "seasonal"
+  contextData     Json? // Parameters that influenced the recommendation
+
+  // Interaction status
+  status          RecommendationStatus @default(GENERATED)
+
+  // User tracking
+  viewedAt        DateTime?
+  clickedAt       DateTime?
+  bookedAt        DateTime?
+  rejectedAt      DateTime?
+
+  // Explicit feedback (optional)
+  userRating      Int? // 1-5 stars if user provides feedback
+
+  // TTL and expiration
+  expiresAt       DateTime // Recommendation expiration date
+  isActive        Boolean  @default(true)
+
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("recommendations")
+  @@index([userId, isActive])
+  @@index([userId, status])
+  @@index([destinationId])
+  @@index([expiresAt])
+  @@index([score(sort: Desc)]) // For top recommendations
+  @@index([createdAt])
+}
+
 // ========== ENUMS ==========
+enum FavoriteType {
+  FLIGHT
+  HOTEL
+  ACTIVITY
+  DESTINATION
+  BOOKING
+}
+
 enum BookingType {
   FLIGHT
   HOTEL
@@ -583,4 +798,13 @@ enum PaymentTransactionStatus {
   FAILED
   CANCELED
   REFUNDED
+}
+
+enum RecommendationStatus {
+  GENERATED // Generated but not viewed
+  VIEWED    // Viewed by user
+  CLICKED   // Clicked (opened details)
+  BOOKED    // Booking made
+  REJECTED  // Explicitly rejected
+  EXPIRED   // Expired (TTL exceeded)
 }
