@@ -4,9 +4,7 @@
  * for ML-based recommendation scoring
  */
 
-import { PrismaClient, TravelOnboardingProfile, UserSettings, UserPreferences } from '@dreamscape/db';
-
-const prisma = new PrismaClient();
+import { prisma, TravelOnboardingProfile, UserSettings, UserPreferences } from '@dreamscape/db';
 
 /**
  * Feature vector dimensions (8D for MVP)
