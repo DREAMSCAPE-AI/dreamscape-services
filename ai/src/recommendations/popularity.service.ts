@@ -12,7 +12,7 @@
  * @module recommendations/popularity
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@dreamscape/db';
 import {
   PopularityWeights,
   DEFAULT_POPULARITY_WEIGHTS,
@@ -25,8 +25,6 @@ import {
   Season,
 } from './types/popularity.types';
 import { UserSegment } from '../segments/types/segment.types';
-
-const prisma = new PrismaClient();
 
 export class PopularityService {
   private weights: PopularityWeights;

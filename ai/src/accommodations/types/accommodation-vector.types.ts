@@ -180,7 +180,7 @@ export interface AccommodationFeatures {
   rooms?: {
     totalRooms: number;
     maxOccupancy: number;
-    hasFamily Rooms: boolean;
+    hasFamilyRooms: boolean;
     hasSuites: boolean;
     hasConnectingRooms: boolean;
   };

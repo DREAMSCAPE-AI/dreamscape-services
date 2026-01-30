@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "AI and recommendations microservice for Dreamscape OTA",
   "main": "dist/server.js",
-  "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
@@ -33,6 +32,7 @@
     "express-rate-limit": "^7.1.5",
     "express-validator": "^7.2.1",
     "helmet": "^7.1.0",
+    "ioredis": "^5.9.2",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "node-fetch": "^3.3.2"

@@ -15,12 +15,10 @@
  */
 
 import cron from 'node-cron';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@dreamscape/db';
 import { PopularityService } from '../recommendations/popularity.service';
 import { PopularityCacheService } from '../recommendations/popularity-cache.service';
 import { PopularityRefreshResult } from '../recommendations/types/popularity.types';
-
-const prisma = new PrismaClient();
 
 export class RefreshPopularityJob {
   private popularityService: PopularityService;

@@ -10,10 +10,11 @@
  * @module onboarding/onboarding-to-vector
  */
 
-import VectorizationService from '../services/VectorizationService';
+import { VectorizationService } from '../services/VectorizationService';
 import { SegmentEngineService } from '../segments/segment-engine.service';
 import { SegmentToVectorService, EnrichedUserVector, FeatureVector } from '../segments/segment-to-vector.service';
 import { SegmentAssignment } from '../segments/types/segment.types';
+import { prisma } from '@dreamscape/db';
 
 interface AIUserPreferences {
   userId: string;
@@ -214,11 +215,6 @@ export class OnboardingToVectorService extends VectorizationService {
   ): Promise<FeatureVector> {
     // Fetch current user vector
     const currentVector = await this.getUserVector(userId);
-
-    // Fetch destination vector
-    const { PrismaClient } = await import('@prisma/client');
-    const prisma = new PrismaClient();
-
     const itemVector = await prisma.itemVector.findFirst({
       where: { destinationId: interaction.destinationId },
       select: { vector: true },
@@ -243,7 +239,7 @@ export class OnboardingToVectorService extends VectorizationService {
     const learningRate = actionWeights[interaction.action];
 
     // Apply adjustment
-    const adjusted = currentVector.map((val, idx) => {
+    const adjusted = currentVector.map((val: number, idx: number) => {
       const destVal = destVector[idx];
       const adjustment = learningRate * (destVal - val);
       return val + adjustment;

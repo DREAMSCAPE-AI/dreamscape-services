@@ -4,6 +4,7 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { prisma } from '@dreamscape/db';
 import { OnboardingOrchestratorService } from '../onboarding/onboarding-orchestrator.service';
 
 const router = Router();
@@ -96,10 +97,6 @@ router.patch('/users/:userId/refine', async (req: Request, res: Response): Promi
 router.get('/users/:userId/segment', async (req: Request, res: Response): Promise<void> => {
   try {
     const { userId } = req.params;
-
-    const { PrismaClient } = await import('@prisma/client');
-    const prisma = new PrismaClient();
-
     const userVector = await prisma.userVector.findUnique({
       where: { userId },
       select: {

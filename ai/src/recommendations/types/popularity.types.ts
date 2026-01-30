@@ -248,7 +248,7 @@ export interface TrendAnalysis {
   /**
    * Bookings in last 30 days
    */
-  recent Bookings: number;
+  recentBookings: number;
 
   /**
    * Bookings in previous 30 days

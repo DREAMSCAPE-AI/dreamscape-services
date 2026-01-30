@@ -10,11 +10,10 @@
  *   ts-node scripts/migrate-existing-vectors.ts
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@dreamscape/db';
 import axios from 'axios';
 import { SegmentEngineService } from '../src/segments/segment-engine.service';
 
-const prisma = new PrismaClient();
 const segmentEngine = new SegmentEngineService();
 
 // Configuration

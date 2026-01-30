@@ -29,7 +29,7 @@
  * @ticket US-IA-003.3
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@dreamscape/db';
 import axios from 'axios';
 import { AccommodationVectorizerService } from './accommodation-vectorizer.service';
 import { AccommodationScoringService } from './accommodation-scoring.service';
@@ -39,8 +39,6 @@ import {
   AccommodationFeatures,
   AccommodationCacheKey,
 } from '../types/accommodation-vector.types';
-
-const prisma = new PrismaClient();
 
 // Configuration
 const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3001';

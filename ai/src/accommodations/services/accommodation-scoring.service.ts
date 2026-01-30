@@ -30,6 +30,7 @@ import {
   AccommodationVector,
   AccommodationFeatures,
   ScoredAccommodation,
+  AccommodationCategory,
   SEGMENT_CATEGORY_BOOST,
 } from '../types/accommodation-vector.types';
 
@@ -349,7 +350,9 @@ export class AccommodationScoringService {
    * @returns Boost multiplier [0.3-1.4]
    */
   private getSegmentBoost(userSegment: string, hotelCategory: string): number {
-    return SEGMENT_CATEGORY_BOOST[userSegment]?.[hotelCategory] || 1.0;
+    const segmentBoosts = SEGMENT_CATEGORY_BOOST[userSegment as keyof typeof SEGMENT_CATEGORY_BOOST];
+    if (!segmentBoosts) return 1.0;
+    return segmentBoosts[hotelCategory as AccommodationCategory] || 1.0;
   }
 
   // ==========================================================================
