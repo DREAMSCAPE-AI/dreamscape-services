@@ -128,3 +128,57 @@ async function updateUserVector(userId: string, data: any) {
   // TODO: Update ML model user vector
   console.log(`[AI] Updating user vector for ${userId}:`, data);
 }
+
+/**
+ * ========================================
+ * IA-002.3: Onboarding Completion Handler
+ * ========================================
+ */
+
+/**
+ * Handle user onboarding completed event
+ * Triggers cold start recommendation workflow
+ * IA-002.3
+ */
+export const handleOnboardingCompleted = async (message: any): Promise<void> => {
+  try {
+    const { userId, profile, completedAt } = JSON.parse(message.value.toString());
+
+    console.log(`[AI] 🎉 User ${userId} completed onboarding at ${completedAt}`);
+
+    // Dynamically import orchestrator to avoid circular dependencies
+    const { OnboardingOrchestratorService } = await import('../onboarding/onboarding-orchestrator.service');
+    const orchestrator = new OnboardingOrchestratorService();
+
+    // Process onboarding completion
+    const result = await orchestrator.processOnboardingComplete(userId, profile);
+
+    if (result.success) {
+      console.log(`✅ [AI] Onboarding workflow completed for user ${userId}`);
+      console.log(`   - Segment: ${result.metadata.segmentAssigned}`);
+      console.log(`   - Confidence: ${(result.metadata.confidence || 0 * 100).toFixed(1)}%`);
+      console.log(`   - Recommendations: ${result.recommendations.length}`);
+    } else {
+      console.error(`❌ [AI] Onboarding workflow failed for user ${userId}:`, result.error);
+    }
+  } catch (error) {
+    console.error(`❌ [AI] Failed to process onboarding completion:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Register Kafka consumer for onboarding events
+ * Call this in app initialization
+ */
+export async function registerOnboardingConsumer(kafkaConsumer: any): Promise<void> {
+  await kafkaConsumer.subscribe({ topic: 'user.onboarding.completed' });
+
+  await kafkaConsumer.run({
+    eachMessage: async ({ message }: any) => {
+      await handleOnboardingCompleted(message);
+    },
+  });
+
+  console.log('✓ Registered Kafka consumer: user.onboarding.completed');
+}
