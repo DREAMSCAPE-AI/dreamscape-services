@@ -15,7 +15,9 @@ export const config = {
     enabled: process.env.REDIS_ENABLED !== 'false' // Enable by default
   },
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173'
+    origin: (process.env.CORS_ORIGIN || 'http://localhost:5173')
+      .split(',')
+      .map(origin => origin.trim())
   }
 };
 
