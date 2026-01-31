@@ -144,8 +144,9 @@ router.post('/login', conditionalRateLimit(loginLimiter), loginValidation, async
       // Publish Kafka event - DR-374 / DR-376
       authKafkaService.publishLogin({
         userId: result.data.user.id,
-        email: result.data.user.email,
-        timestamp: new Date(),
+        sessionId: result.data.tokens?.accessToken?.substring(0, 16) || 'unknown',
+        loginAt: new Date().toISOString(),
+        method: 'password',
         ipAddress: req.ip || req.headers['x-forwarded-for'] as string || 'unknown',
         userAgent: req.headers['user-agent'] || 'unknown'
       }).catch(err => console.error('[Login] Failed to publish Kafka event:', err));
@@ -272,8 +273,8 @@ router.post('/change-password', authenticateToken, changePasswordValidation, asy
       // Publish Kafka event - DR-374 / DR-376
       authKafkaService.publishPasswordChanged({
         userId: req.user.id,
-        timestamp: new Date(),
-        ipAddress: req.ip || req.headers['x-forwarded-for'] as string || 'unknown'
+        changedAt: new Date().toISOString(),
+        method: 'user_initiated'
       }).catch(err => console.error('[ChangePassword] Failed to publish Kafka event:', err));
     }
 
@@ -328,13 +329,13 @@ router.post('/refresh', conditionalRateLimit(refreshLimiter), async (req: expres
       result.data.tokens = tokensWithoutRefresh as any;
 
       // Publish Kafka event - DR-374 / DR-376
-      if (result.data.user?.id) {
-        authKafkaService.publishTokenRefreshed({
-          userId: result.data.user.id,
-          timestamp: new Date(),
-          ipAddress: req.ip || req.headers['x-forwarded-for'] as string || 'unknown'
-        }).catch(err => console.error('[TokenRefresh] Failed to publish Kafka event:', err));
-      }
+      // TODO: Extract userId from JWT token payload to publish event
+      // authKafkaService.publishTokenRefreshed({
+      //   userId: extractedUserId,
+      //   sessionId: 'session-id',
+      //   refreshedAt: new Date().toISOString(),
+      //   expiresAt: new Date(Date.now() + 3600000).toISOString()
+      // }).catch(err => console.error('[TokenRefresh] Failed to publish Kafka event:', err));
     }
 
     const statusCode = result.success ? 200 : 401;
@@ -403,8 +404,9 @@ router.post('/logout', async (req: express.Request, res: express.Response) => {
     if (loggedOutUserId) {
       authKafkaService.publishLogout({
         userId: loggedOutUserId,
-        timestamp: new Date(),
-        ipAddress: req.ip || req.headers['x-forwarded-for'] as string || 'unknown'
+        sessionId: req.cookies?.refreshToken?.substring(0, 16) || 'unknown',
+        logoutAt: new Date().toISOString(),
+        reason: 'user_initiated'
       }).catch(err => console.error('[Logout] Failed to publish Kafka event:', err));
     }
 
