@@ -21,8 +21,14 @@ const PORT = 3001; // Force port 3001
 
 app.use(helmet());
 app.use(cookieParser());
+
+// Parse CORS origins from environment variable (comma-separated list)
+const corsOrigins = (process.env.CORS_ORIGIN || process.env.CLIENT_URL || 'http://localhost:5173')
+  .split(',')
+  .map(origin => origin.trim());
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: corsOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
