@@ -201,6 +201,31 @@ class StripeService {
   }
 
   /**
+   * Update Payment Intent metadata
+   * @param paymentIntentId Payment Intent ID
+   * @param metadata New metadata to set
+   */
+  async updatePaymentIntentMetadata(
+    paymentIntentId: string,
+    metadata: Record<string, string>
+  ): Promise<Stripe.PaymentIntent> {
+    try {
+      const stripe = this.getStripe();
+      console.log(`[StripeService] Updating metadata for Payment Intent ${paymentIntentId}`);
+
+      const paymentIntent = await stripe.paymentIntents.update(paymentIntentId, {
+        metadata,
+      });
+
+      console.log(`✅ [StripeService] Payment Intent metadata updated: ${paymentIntentId}`);
+      return paymentIntent;
+    } catch (error) {
+      console.error(`[StripeService] Error updating Payment Intent metadata ${paymentIntentId}:`, error);
+      throw this.handleStripeError(error);
+    }
+  }
+
+  /**
    * Get publishable key for frontend
    */
   getPublishableKey(): string {
