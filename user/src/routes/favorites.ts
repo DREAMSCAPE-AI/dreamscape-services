@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import { authenticateToken } from '../middleware/auth';
+import { favoritesCheckLimiter } from '../middleware/rateLimiter';
 import {
   getAllFavorites,
   addFavorite,
   getFavoriteById,
   updateFavorite,
   deleteFavorite,
-  checkFavorite
+  checkFavorite,
+  checkFavoritesBatch
 } from '../controllers/favoriteController';
 
 const router = Router();
@@ -32,13 +34,23 @@ router.get('/', getAllFavorites);
 router.post('/', addFavorite);
 
 /**
+ * POST /api/v1/users/favorites/check-batch
+ * Batch check if multiple entities are favorited
+ * Body: { items: [{ entityType, entityId }] }
+ * Returns: { results: [{ entityType, entityId, isFavorited, favorite? }] }
+ *
+ * Note: This route must be defined before the check route to avoid conflicts
+ */
+router.post('/check-batch', favoritesCheckLimiter, checkFavoritesBatch);
+
+/**
  * GET /api/v1/users/favorites/check/:entityType/:entityId
  * Check if entity is favorited by authenticated user
  * Params: entityType, entityId
  *
  * Note: This route must be defined before the /:id route to avoid conflicts
  */
-router.get('/check/:entityType/:entityId', checkFavorite);
+router.get('/check/:entityType/:entityId', favoritesCheckLimiter, checkFavorite);
 
 /**
  * GET /api/v1/users/favorites/:id
