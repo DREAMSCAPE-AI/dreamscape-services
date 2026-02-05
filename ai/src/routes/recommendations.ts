@@ -434,4 +434,202 @@ router.get('/activities/:location', async (req: Request, res: Response): Promise
   }
 });
 
+/**
+ * ========================================
+ * IA-002: Cold Start Recommendation Routes
+ * ========================================
+ */
+
+/**
+ * GET /api/v1/recommendations/popular
+ * Get popular destinations (optionally filtered by segment or category)
+ * IA-002.2
+ */
+router.get('/popular', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { segment, category, limit = '20' } = req.query;
+    const limitNum = parseInt(limit as string, 10);
+
+    const PopularityService = (await import('../recommendations/popularity.service')).PopularityService;
+    const PopularityCacheService = (await import('../recommendations/popularity-cache.service')).PopularityCacheService;
+
+    const popularityService = new PopularityService();
+    const cacheService = new PopularityCacheService();
+
+    let results;
+
+    if (segment) {
+      // Try cache first
+      results = await cacheService.getTopBySegment(segment as any);
+      if (!results) {
+        results = await popularityService.getTopBySegment(segment as any, limitNum);
+      }
+    } else if (category) {
+      results = await cacheService.getTopByCategory(category as string);
+      if (!results) {
+        results = await popularityService.getTopByCategory(category as string, limitNum);
+      }
+    } else {
+      results = await cacheService.getTopDestinations();
+      if (!results) {
+        results = await popularityService.getTopDestinations(limitNum);
+      }
+    }
+
+    res.json({
+      count: results?.length || 0,
+      popular: results || [],
+      metadata: {
+        source: results ? 'cache' : 'database',
+        segment: segment || null,
+        category: category || null,
+      },
+    });
+  } catch (error) {
+    console.error('Popular recommendations error:', error);
+    res.status(500).json({
+      error: 'Failed to get popular recommendations',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/recommendations/cold-start
+ * Get cold start recommendations for new users
+ * IA-002.2, IA-002.3
+ */
+router.get('/cold-start', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId, strategy = 'adaptive', limit = '20', diversityFactor = '0.3' } = req.query;
+
+    if (!userId) {
+      res.status(400).json({ error: 'userId is required' });
+      return;
+    }
+
+    const ColdStartService = (await import('../recommendations/cold-start.service')).ColdStartService;
+    const coldStartService = new ColdStartService();
+
+    // Fetch user profile (would come from user service in production)
+    // For now, use mock or fetch from UserVector
+    const userProfile = {
+      userId: userId as string,
+      isOnboardingCompleted: true,
+      metadata: { dataQuality: { completeness: 70 } },
+    };
+
+    const recommendations = await coldStartService.getRecommendationsForNewUser(
+      userId as string,
+      userProfile,
+      {
+        strategy: strategy as any,
+        limit: parseInt(limit as string, 10),
+        diversityFactor: parseFloat(diversityFactor as string),
+        includeReasons: true,
+      }
+    );
+
+    res.json({
+      userId,
+      count: recommendations.length,
+      strategy: recommendations[0]?.strategy || strategy,
+      recommendations,
+    });
+  } catch (error) {
+    console.error('Cold start recommendations error:', error);
+    res.status(500).json({
+      error: 'Failed to get cold start recommendations',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/recommendations/segments/:segment/popular
+ * Get popular destinations for a specific user segment
+ * IA-002.1, IA-002.2
+ */
+router.get('/segments/:segment/popular', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { segment } = req.params;
+    const { limit = '20' } = req.query;
+    const limitNum = parseInt(limit as string, 10);
+
+    const PopularityService = (await import('../recommendations/popularity.service')).PopularityService;
+    const PopularityCacheService = (await import('../recommendations/popularity-cache.service')).PopularityCacheService;
+
+    const popularityService = new PopularityService();
+    const cacheService = new PopularityCacheService();
+
+    // Try cache first
+    let results = await cacheService.getTopBySegment(segment as any);
+    if (!results) {
+      results = await popularityService.getTopBySegment(segment as any, limitNum);
+    }
+
+    res.json({
+      segment,
+      count: results?.length || 0,
+      popular: results || [],
+      metadata: {
+        source: results ? 'cache' : 'database',
+      },
+    });
+  } catch (error) {
+    console.error('Segment popular recommendations error:', error);
+    res.status(500).json({
+      error: 'Failed to get segment popular recommendations',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/recommendations/popularity/refresh
+ * Manually trigger popularity score refresh (admin endpoint)
+ * IA-002.2
+ */
+router.post('/popularity/refresh', async (req: Request, res: Response): Promise<void> => {
+  try {
+    // TODO: Add admin authentication check
+    const { refreshPopularityJob } = await import('../jobs/refresh-popularity.job');
+
+    const result = await refreshPopularityJob.runNow();
+
+    res.json({
+      success: result.success,
+      result,
+    });
+  } catch (error) {
+    console.error('Popularity refresh error:', error);
+    res.status(500).json({
+      error: 'Failed to refresh popularity scores',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/recommendations/cache/stats
+ * Get cache statistics (admin endpoint)
+ * IA-002.2
+ */
+router.get('/cache/stats', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const PopularityCacheService = (await import('../recommendations/popularity-cache.service')).PopularityCacheService;
+    const cacheService = new PopularityCacheService();
+
+    const stats = await cacheService.getCacheStats();
+
+    res.json(stats);
+  } catch (error) {
+    console.error('Cache stats error:', error);
+    res.status(500).json({
+      error: 'Failed to get cache statistics',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
 export default router;

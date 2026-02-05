@@ -1,4 +1,4 @@
-import { PrismaClient } from '../../../db/node_modules/@prisma/client';
+import { PrismaClient } from '@dreamscape/db';
 
 declare global {
   // eslint-disable-next-line no-var

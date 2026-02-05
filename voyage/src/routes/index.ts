@@ -33,6 +33,9 @@ router.use('/bookings', bookingsRouter);
 // Bookings management routes
 router.use('/bookings', bookingsRouter);
 
+// Bookings management routes
+router.use('/bookings', bookingsRouter);
+
 // Itinerary management routes
 router.use('/itineraries', itinerariesRouter);
 

@@ -392,3 +392,100 @@ export const checkFavorite = async (req: AuthRequest, res: Response): Promise<vo
     sendError(res, 500, 'Failed to check favorite status');
   }
 };
+
+/**
+ * Batch check if multiple entities are favorited by authenticated user
+ * Body: { items: [{ entityType, entityId }] }
+ * Returns: { results: [{ entityType, entityId, isFavorited, favorite? }] }
+ */
+export const checkFavoritesBatch = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    const { items } = req.body;
+
+    if (!userId) {
+      return sendError(res, 401, 'Authentication required');
+    }
+
+    if (!items || !Array.isArray(items)) {
+      return sendError(res, 400, 'Items array is required');
+    }
+
+    if (items.length === 0) {
+      res.json({ success: true, results: [] });
+      return;
+    }
+
+    if (items.length > 100) {
+      return sendError(res, 400, 'Maximum 100 items allowed per batch request');
+    }
+
+    // Validate all items
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (!item.entityType || !item.entityId) {
+        return sendError(res, 400, `Item at index ${i}: entityType and entityId are required`);
+      }
+      if (!Object.values(FavoriteType).includes(item.entityType as FavoriteType)) {
+        return sendError(res, 400, `Item at index ${i}: Invalid entity type. Must be one of: ${Object.values(FavoriteType).join(', ')}`);
+      }
+    }
+
+    // Build WHERE clause for batch query
+    const whereConditions = items.map(item => ({
+      userId,
+      entityType: item.entityType as FavoriteType,
+      entityId: item.entityId
+    }));
+
+    // Fetch all favorites in a single query
+    const favorites = await prisma.favorite.findMany({
+      where: {
+        AND: [
+          { userId },
+          {
+            OR: whereConditions.map(condition => ({
+              entityType: condition.entityType,
+              entityId: condition.entityId
+            }))
+          }
+        ]
+      },
+      select: {
+        id: true,
+        entityType: true,
+        entityId: true,
+        createdAt: true
+      }
+    });
+
+    // Create a map for quick lookup
+    const favoritesMap = new Map(
+      favorites.map(fav => [
+        `${fav.entityType}:${fav.entityId}`,
+        fav
+      ])
+    );
+
+    // Build results array
+    const results = items.map(item => {
+      const key = `${item.entityType}:${item.entityId}`;
+      const favorite = favoritesMap.get(key);
+
+      return {
+        entityType: item.entityType,
+        entityId: item.entityId,
+        isFavorited: !!favorite,
+        favorite: favorite || null
+      };
+    });
+
+    res.json({
+      success: true,
+      results
+    });
+  } catch (error) {
+    console.error('Error checking favorites batch:', error);
+    sendError(res, 500, 'Failed to check favorites status');
+  }
+};

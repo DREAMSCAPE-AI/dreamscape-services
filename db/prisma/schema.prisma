@@ -473,6 +473,12 @@ model UserVector {
   version   Int      @default(1) // Vectorization model version
   source    String   @default("onboarding") // onboarding, behavior, hybrid
 
+  // User segmentation (IA-002.1)
+  segments           Json?     // Array of {segment: string, score: number, reasons: string[], assignedAt: Date}
+  primarySegment     String?   // Main segment (e.g., "FAMILY_EXPLORER", "BUDGET_BACKPACKER")
+  segmentConfidence  Float?    // Confidence score [0-1] for segment assignment
+  lastSegmentUpdate  DateTime? // When segments were last recalculated
+
   // Usage statistics
   usageCount     Int      @default(0) // Number of times used for scoring
   lastUsedAt     DateTime?
@@ -487,6 +493,7 @@ model UserVector {
   @@map("user_vectors")
   @@index([userId])
   @@index([updatedAt]) // For identifying stale vectors
+  @@index([primarySegment]) // For segment-based queries (IA-002.1)
 }
 
 /// Destination/item feature vector for recommendation matching

@@ -25,14 +25,10 @@ const PORT = process.env.PORT || 3002;
 // Security middleware
 app.use(helmet());
 
-// CORS configuration - allow multiple origins for development
-const allowedOrigins = [
-  process.env.CLIENT_URL || 'http://localhost:5173',
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-  'http://172.21.160.1:5173',
-  // Add any other development origins as needed
-];
+// CORS configuration - allow multiple origins from environment or defaults
+const allowedOrigins = (process.env.CORS_ORIGIN || process.env.CLIENT_URL || 'http://localhost:5173,http://127.0.0.1:5173')
+  .split(',')
+  .map(origin => origin.trim());
 
 app.use(cors({
   origin: (origin, callback) => {
