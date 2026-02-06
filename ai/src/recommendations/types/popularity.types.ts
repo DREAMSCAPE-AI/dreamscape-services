@@ -307,6 +307,11 @@ export interface PopularityCacheMetadata {
   itemCount: number;
 
   /**
+   * Cache scope (global, segment, etc.)
+   */
+  scope?: string;
+
+  /**
    * Cache hit rate percentage
    */
   hitRate?: number;
