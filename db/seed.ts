@@ -1,4 +1,4 @@
-import { PrismaClient } from '../node_modules/@prisma/client/index.js';
+import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -163,6 +163,97 @@ async function main() {
       },
     },
   });
+
+  // Seed Privacy Policy (GDPR)
+  console.log('🔒 Seeding privacy policy...');
+  const privacyPolicy = await prisma.privacyPolicy.create({
+    data: {
+      version: '1.0.0',
+      title: 'DreamScape Privacy Policy',
+      content: `1. Introduction
+
+DreamScape ("we", "our", "us") is committed to protecting your personal data. This Privacy Policy explains how we collect, use, store, and share your information when you use our travel platform services.
+
+2. Data We Collect
+
+We collect the following categories of personal data:
+- Identity Data: first name, last name, email address
+- Profile Data: phone number, date of birth, nationality, travel preferences
+- Technical Data: IP address, browser type, device information
+- Usage Data: search history, booking history, browsing patterns
+- Payment Data: payment method details (processed securely via Stripe)
+- Location Data: approximate location based on IP for relevant search results
+
+3. How We Use Your Data
+
+We process your personal data for the following purposes:
+- Account management and authentication
+- Flight, hotel, and activity search and booking services
+- Personalized travel recommendations powered by AI
+- Payment processing and booking confirmations
+- Customer support and communication
+- Service improvement and analytics (with your consent)
+- Marketing communications (with your consent)
+
+4. Legal Basis (GDPR Article 6)
+
+- Contract performance: account management, bookings, payments
+- Legitimate interest: service improvement, security, fraud prevention
+- Consent: marketing, analytics, personalized recommendations
+- Legal obligation: tax records, regulatory compliance
+
+5. Data Sharing
+
+We share your data with:
+- Amadeus GDS: flight and hotel search/booking
+- Stripe: payment processing
+- OpenAI: AI-powered recommendations (anonymized)
+- Cloud providers: secure data hosting (AWS/GCP)
+
+We never sell your personal data to third parties.
+
+6. Data Retention
+
+- Account data: retained while account is active + 30 days after deletion request
+- Booking data: 5 years (legal/tax requirements)
+- Analytics data: 2 years (anonymized after)
+- Payment data: as required by financial regulations
+
+7. Your Rights (GDPR Articles 15-22)
+
+You have the right to:
+- Access your personal data (Article 15)
+- Rectify inaccurate data (Article 16)
+- Request erasure of your data (Article 17)
+- Restrict processing (Article 18)
+- Data portability - export your data (Article 20)
+- Object to processing (Article 21)
+- Withdraw consent at any time
+
+Exercise these rights via Settings > Data & Privacy or contact privacy@dreamscape.com.
+
+8. Cookies
+
+We use cookies for essential functionality, preferences, analytics, and marketing. Manage your cookie preferences via our cookie consent banner or Settings > Data & Privacy.
+
+9. Security
+
+We implement industry-standard security measures including encryption at rest and in transit, access controls, and regular security audits.
+
+10. Contact
+
+Data Protection Officer: dpo@dreamscape.com
+Support: privacy@dreamscape.com
+
+11. Changes
+
+We will notify you of material changes to this policy via email and in-app notifications. Continued use after changes constitutes acceptance.
+
+Last updated: February 2026`,
+      effectiveAt: new Date('2026-01-01T00:00:00Z'),
+    },
+  });
+  console.log(`   Created privacy policy v${privacyPolicy.version} (id: ${privacyPolicy.id})`);
 
   console.log('✅ Database seeding completed successfully!');
 }

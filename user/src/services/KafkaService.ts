@@ -18,6 +18,9 @@ import {
   type AuthLoginPayload,
   type AuthLogoutPayload,
   type MessageHandler,
+  type GdprConsentUpdatedPayload,
+  type GdprExportRequestedPayload,
+  type GdprDeletionRequestedPayload,
 } from '@dreamscape/kafka';
 
 const SERVICE_NAME = 'user-service';
@@ -155,6 +158,66 @@ class UserKafkaService {
 
     await this.client.publish(KAFKA_TOPICS.USER_PREFERENCES_UPDATED, event, payload.userId);
     console.log(`[UserKafkaService] Published preferences updated event for user: ${payload.userId}`);
+  }
+
+  /**
+   * Publish consent updated event (GDPR)
+   */
+  async publishConsentUpdated(payload: GdprConsentUpdatedPayload, correlationId?: string): Promise<void> {
+    if (!this.client) {
+      console.warn('[UserKafkaService] Client not initialized, skipping publish');
+      return;
+    }
+
+    const event = createEvent(
+      'user.consent.updated',
+      SERVICE_NAME,
+      payload,
+      { correlationId }
+    );
+
+    await this.client.publish(KAFKA_TOPICS.GDPR_CONSENT_UPDATED, event, payload.userId);
+    console.log(`[UserKafkaService] Published consent updated event for user: ${payload.userId}`);
+  }
+
+  /**
+   * Publish GDPR data export requested event
+   */
+  async publishGdprExportRequested(payload: GdprExportRequestedPayload, correlationId?: string): Promise<void> {
+    if (!this.client) {
+      console.warn('[UserKafkaService] Client not initialized, skipping publish');
+      return;
+    }
+
+    const event = createEvent(
+      'gdpr.export.requested',
+      SERVICE_NAME,
+      payload,
+      { correlationId }
+    );
+
+    await this.client.publish(KAFKA_TOPICS.GDPR_EXPORT_REQUESTED, event, payload.userId);
+    console.log(`[UserKafkaService] Published GDPR export requested event for user: ${payload.userId}`);
+  }
+
+  /**
+   * Publish GDPR data deletion requested event
+   */
+  async publishGdprDeletionRequested(payload: GdprDeletionRequestedPayload, correlationId?: string): Promise<void> {
+    if (!this.client) {
+      console.warn('[UserKafkaService] Client not initialized, skipping publish');
+      return;
+    }
+
+    const event = createEvent(
+      'gdpr.deletion.requested',
+      SERVICE_NAME,
+      payload,
+      { correlationId }
+    );
+
+    await this.client.publish(KAFKA_TOPICS.GDPR_DELETION_REQUESTED, event, payload.userId);
+    console.log(`[UserKafkaService] Published GDPR deletion requested event for user: ${payload.userId}`);
   }
 
   /**
