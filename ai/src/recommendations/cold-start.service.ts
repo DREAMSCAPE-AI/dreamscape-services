@@ -14,7 +14,7 @@
  * @module recommendations/cold-start
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@dreamscape/db';
 import { PopularityService } from './popularity.service';
 import { PopularityCacheService } from './popularity-cache.service';
 import { SegmentEngineService } from '../segments/segment-engine.service';
@@ -29,8 +29,6 @@ import {
 } from './types/cold-start.types';
 import { UserSegment } from '../segments/types/segment.types';
 import { FeatureVector } from '../segments/segment-to-vector.service';
-
-const prisma = new PrismaClient();
 
 export class ColdStartService {
   private popularityService: PopularityService;

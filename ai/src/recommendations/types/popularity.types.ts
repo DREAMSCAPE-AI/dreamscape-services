@@ -248,7 +248,7 @@ export interface TrendAnalysis {
   /**
    * Bookings in last 30 days
    */
-  recent Bookings: number;
+  recentBookings: number;
 
   /**
    * Bookings in previous 30 days
@@ -305,6 +305,11 @@ export interface PopularityCacheMetadata {
    * Number of cached destinations
    */
   itemCount: number;
+
+  /**
+   * Cache scope (global, segment, etc.)
+   */
+  scope?: string;
 
   /**
    * Cache hit rate percentage

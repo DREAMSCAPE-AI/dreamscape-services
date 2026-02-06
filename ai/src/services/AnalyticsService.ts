@@ -3,9 +3,7 @@
  * Provides analytics and metrics for the recommendation system
  */
 
-import { PrismaClient, RecommendationStatus } from '@dreamscape/db';
-
-const prisma = new PrismaClient();
+import { prisma, RecommendationStatus } from '@dreamscape/db';
 
 export interface RecommendationMetrics {
   totalGenerated: number;

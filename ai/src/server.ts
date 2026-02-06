@@ -4,28 +4,28 @@ import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
-import { DatabaseService } from './database/DatabaseService';
-import recommendationsRoutes from './routes/recommendations';
-import predictionsRoutes from './routes/predictions';
-import healthRoutes from './routes/health';
-import { rateLimiter } from './middleware/rateLimiter';
-import { errorHandler } from './middleware/errorHandler';
-import aiKafkaService from './services/KafkaService';
+import { prisma } from '@dreamscape/db';
+import recommendationsRoutes from '@/routes/recommendations';
+// import predictionsRoutes from '@/routes/predictions'; // TODO: Fix AmadeusService import
+import healthRoutes from '@/routes/health';
+import { apiLimiter } from '@/middleware/rateLimiter';
+import { errorHandler } from '@/middleware/errorHandler';
+import aiKafkaService from '@/services/KafkaService';
 import {
   handleUserPreferencesUpdated,
   handleUserProfileUpdated,
-} from './handlers/userEventsHandler';
+} from '@/handlers/userEventsHandler';
 import {
   handleVoyageSearchPerformed,
   handleVoyageBookingCreated,
   handleFlightSelected,
   handleHotelSelected,
-} from './handlers/voyageEventsHandler';
+} from '@/handlers/voyageEventsHandler';
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3003;
+const PORT = process.env.PORT || 3005;
 
 // Security middleware
 app.use(helmet());
@@ -47,11 +47,11 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Rate limiting
-app.use(rateLimiter);
+app.use(apiLimiter);
 
 // Routes
 app.use('/api/v1/recommendations', recommendationsRoutes);
-app.use('/api/v1/predictions', predictionsRoutes);
+// app.use('/api/v1/predictions', predictionsRoutes); // TODO: Fix AmadeusService import
 
 // Health check - INFRA-013.1
 app.use('/health', healthRoutes);
@@ -71,7 +71,7 @@ app.use('*', (req, res) => {
 const startServer = async () => {
   try {
     // Initialize database
-    await DatabaseService.connect();
+    await prisma.$connect();
     console.log('✅ Database connected successfully');
 
     // Initialize Kafka and subscribe to events - DR-387
@@ -104,7 +104,7 @@ const startServer = async () => {
         console.log('✅ Kafka disconnected');
 
         // Disconnect database
-        await DatabaseService.disconnect();
+        await prisma.$disconnect();
         console.log('✅ Database disconnected');
 
         process.exit(0);

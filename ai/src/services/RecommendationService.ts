@@ -3,12 +3,10 @@
  * Main service for managing recommendations, tracking interactions, and analytics
  */
 
-import { PrismaClient, Recommendation, RecommendationStatus } from '@dreamscape/db';
+import { prisma, Recommendation, RecommendationStatus } from '@dreamscape/db';
 import ScoringService from './ScoringService';
 import VectorizationService from './VectorizationService';
 import CacheService from './CacheService';
-
-const prisma = new PrismaClient();
 
 export interface RecommendationOptions {
   limit?: number;

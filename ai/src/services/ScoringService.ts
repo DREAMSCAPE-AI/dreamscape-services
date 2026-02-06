@@ -4,10 +4,9 @@
  * Generates personalized recommendations based on ML scoring
  */
 
-import { PrismaClient, ItemVector } from '@dreamscape/db';
+import { prisma, ItemVector } from '@dreamscape/db';
 import VectorizationService from './VectorizationService';
 
-const prisma = new PrismaClient();
 
 interface ScoredItem {
   item: ItemVector;

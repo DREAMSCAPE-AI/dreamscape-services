@@ -4,9 +4,7 @@
  * for ML-based recommendation scoring
  */
 
-import { PrismaClient, TravelOnboardingProfile, UserSettings, UserPreferences } from '@dreamscape/db';
-
-const prisma = new PrismaClient();
+import { prisma, TravelOnboardingProfile, UserSettings, UserPreferences } from '@dreamscape/db';
 
 /**
  * Feature vector dimensions (8D for MVP)
@@ -125,8 +123,8 @@ export class VectorizationService {
     const culturalTypes = ['CULTURAL', 'HISTORICAL', 'URBAN', 'SHOPPING', 'NIGHTLIFE'];
     const natureTypes = ['NATURE', 'BEACH', 'MOUNTAIN', 'ADVENTURE'];
 
-    const culturalCount = travelTypes.filter(t => culturalTypes.includes(t)).length;
-    const natureCount = travelTypes.filter(t => natureTypes.includes(t)).length;
+    let culturalCount = travelTypes.filter(t => culturalTypes.includes(t)).length;
+    let natureCount = travelTypes.filter(t => natureTypes.includes(t)).length;
 
     // Boost from activity types
     if (activityTypes) {

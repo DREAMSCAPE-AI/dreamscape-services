@@ -12,13 +12,11 @@
  * @module onboarding/orchestrator
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@dreamscape/db';
 import axios from 'axios';
 import { OnboardingToVectorService } from './onboarding-to-vector.service';
 import { ColdStartService } from '../recommendations/cold-start.service';
 import { EnrichedUserVector } from '../segments/segment-to-vector.service';
-
-const prisma = new PrismaClient();
 
 // Configuration
 const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3001';
