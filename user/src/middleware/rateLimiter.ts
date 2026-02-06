@@ -23,3 +23,15 @@ export const searchLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+// Rate limiter for favorites check endpoints
+export const favoritesCheckLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 50, // Limit each IP to 50 favorites check requests per minute
+  message: {
+    error: 'Too many favorites check requests, please try again later.',
+    retryAfter: '1 minute'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
