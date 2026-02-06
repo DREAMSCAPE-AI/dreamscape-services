@@ -47,6 +47,11 @@ model User {
   userVector      UserVector?
   recommendations Recommendation[]
 
+  // GDPR Compliance
+  policyAcceptances UserPolicyAcceptance[]
+  consent           UserConsent?
+  gdprRequests      GdprRequest[]
+
   @@map("users")
 }
 
@@ -807,4 +812,130 @@ enum RecommendationStatus {
   BOOKED    // Booking made
   REJECTED  // Explicitly rejected
   EXPIRED   // Expired (TTL exceeded)
+}
+
+// ========== GDPR COMPLIANCE MODELS ==========
+
+model PrivacyPolicy {
+  id          String                 @id @default(uuid())
+  version     String                 @unique
+  title       String
+  content     String                 @db.Text
+  effectiveAt DateTime
+  createdAt   DateTime               @default(now())
+  acceptances UserPolicyAcceptance[]
+
+  @@index([effectiveAt])
+  @@map("privacy_policies")
+}
+
+model UserPolicyAcceptance {
+  id            String        @id @default(uuid())
+  userId        String
+  policyId      String
+  policyVersion String
+  acceptedAt    DateTime      @default(now())
+  ipAddress     String?
+  userAgent     String?
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  policy        PrivacyPolicy @relation(fields: [policyId], references: [id])
+
+  @@unique([userId, policyId])
+  @@index([userId, acceptedAt(sort: Desc)])
+  @@map("user_policy_acceptances")
+}
+
+model UserConsent {
+  id            String           @id @default(uuid())
+  userId        String           @unique
+  analytics     Boolean          @default(false)
+  marketing     Boolean          @default(false)
+  functional    Boolean          @default(true)
+  preferences   Boolean          @default(true)
+  lastUpdatedAt DateTime         @default(now())
+  ipAddress     String?
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  history       ConsentHistory[]
+
+  @@map("user_consents")
+}
+
+model ConsentHistory {
+  id           String      @id @default(uuid())
+  consentId    String
+  userId       String
+  analytics    Boolean
+  marketing    Boolean
+  functional   Boolean
+  preferences  Boolean
+  changedAt    DateTime    @default(now())
+  ipAddress    String?
+  userAgent    String?
+  changeReason String?
+  consent      UserConsent @relation(fields: [consentId], references: [id], onDelete: Cascade)
+
+  @@index([userId, changedAt(sort: Desc)])
+  @@map("consent_history")
+}
+
+model GdprRequest {
+  id          String            @id @default(uuid())
+  userId      String
+  requestType GdprRequestType
+  status      GdprRequestStatus @default(PENDING)
+  requestedAt DateTime          @default(now())
+  processedAt DateTime?
+  completedAt DateTime?
+  exportData  Json?
+  expiresAt   DateTime?
+  reason      String?
+  notes       String?
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, requestedAt(sort: Desc)])
+  @@index([status])
+  @@map("gdpr_requests")
+}
+
+model DataAccessLog {
+  id           String           @id @default(uuid())
+  userId       String
+  accessorId   String?
+  accessorType String
+  action       DataAccessAction
+  resource     String
+  resourceId   String?
+  ipAddress    String?
+  userAgent    String?
+  endpoint     String?
+  method       String?
+  accessedAt   DateTime         @default(now())
+
+  @@index([userId, accessedAt(sort: Desc)])
+  @@index([accessorId])
+  @@index([resource, resourceId])
+  @@map("data_access_logs")
+}
+
+enum GdprRequestType {
+  DATA_EXPORT
+  DATA_DELETION
+  DATA_RECTIFICATION
+  ACCESS_REQUEST
+}
+
+enum GdprRequestStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+
+enum DataAccessAction {
+  READ
+  CREATE
+  UPDATE
+  DELETE
+  EXPORT
 }

@@ -10,10 +10,12 @@
     "migrate": "prisma migrate dev",
     "studio": "prisma studio",
     "reset": "prisma migrate reset --force",
-    "push": "prisma db push"
+    "push": "prisma db push",
+    "seed": "tsx seed.ts"
   },
   "dependencies": {
-    "@prisma/client": "^6.17.1"
+    "@prisma/client": "^6.17.1",
+    "bcryptjs": "^3.0.3"
   },
   "devDependencies": {
     "@types/node": "^20.19.11",

@@ -357,6 +357,33 @@ export interface NotificationPushRequestedPayload {
 }
 
 /**
+ * GDPR/Compliance Events
+ */
+export interface GdprConsentUpdatedPayload {
+  userId: string;
+  analytics: boolean;
+  marketing: boolean;
+  functional: boolean;
+  preferences: boolean;
+  updatedAt: string;
+  ipAddress?: string;
+}
+
+export interface GdprExportRequestedPayload {
+  requestId: string;
+  userId: string;
+  requestedAt: string;
+  expiresAt: string;
+}
+
+export interface GdprDeletionRequestedPayload {
+  requestId: string;
+  userId: string;
+  reason?: string;
+  requestedAt: string;
+}
+
+/**
  * Analytics Events
  */
 export interface AnalyticsEventTrackedPayload {
@@ -421,6 +448,10 @@ export type AIUserBehaviorAnalyzedEvent = BaseEvent<AIUserBehaviorAnalyzedPayloa
 export type NotificationEmailRequestedEvent = BaseEvent<NotificationEmailRequestedPayload>;
 export type NotificationSMSRequestedEvent = BaseEvent<NotificationSMSRequestedPayload>;
 export type NotificationPushRequestedEvent = BaseEvent<NotificationPushRequestedPayload>;
+
+export type GdprConsentUpdatedEvent = BaseEvent<GdprConsentUpdatedPayload>;
+export type GdprExportRequestedEvent = BaseEvent<GdprExportRequestedPayload>;
+export type GdprDeletionRequestedEvent = BaseEvent<GdprDeletionRequestedPayload>;
 
 export type AnalyticsEventTrackedEvent = BaseEvent<AnalyticsEventTrackedPayload>;
 export type AnalyticsPageViewEvent = BaseEvent<AnalyticsPageViewPayload>;

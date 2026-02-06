@@ -87,6 +87,11 @@ export const KAFKA_TOPICS = {
   NOTIFICATION_SMS_REQUESTED: 'dreamscape.notification.sms.requested',
   NOTIFICATION_PUSH_REQUESTED: 'dreamscape.notification.push.requested',
 
+  // GDPR/Compliance Events
+  GDPR_CONSENT_UPDATED: 'dreamscape.user.consent.updated',
+  GDPR_EXPORT_REQUESTED: 'dreamscape.gdpr.export.requested',
+  GDPR_DELETION_REQUESTED: 'dreamscape.gdpr.deletion.requested',
+
   // Analytics Events
   ANALYTICS_EVENT_TRACKED: 'dreamscape.analytics.event.tracked',
   ANALYTICS_PAGE_VIEW: 'dreamscape.analytics.page.view',

@@ -13,6 +13,8 @@ import onboardingRoutes from '@routes/onboarding';
 import aiIntegrationRoutes from '@routes/aiIntegration';
 import favoritesRoutes from './routes/favorites';
 import historyRoutes from '@routes/history';
+import gdprRoutes from './routes/gdpr';
+import { auditLogger } from './middleware/auditLogger';
 import { apiLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/errorHandler';
 import { userKafkaService } from './services/KafkaService';
@@ -57,6 +59,9 @@ app.use(apiLimiter);
 // Static files for avatar uploads
 app.use('/uploads', express.static('uploads'));
 
+// Audit logging middleware (logs access to sensitive routes)
+app.use(auditLogger);
+
 // Routes
 // app.use('/api/v1/activities', activitiesRoutes); // TODO: Fix AmadeusService import
 app.use('/api/v1/users/profile', profileRoutes);
@@ -64,6 +69,7 @@ app.use('/api/v1/users/onboarding', onboardingRoutes);
 app.use('/api/v1/users/history', historyRoutes);
 app.use('/api/v1/ai', aiIntegrationRoutes);
 app.use('/api/v1/users/favorites', favoritesRoutes);
+app.use('/api/v1/users/gdpr', gdprRoutes);
 
 // Health check routes - INFRA-013.1
 app.use('/health', healthRoutes);
