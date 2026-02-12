@@ -632,4 +632,188 @@ router.get('/cache/stats', async (req: Request, res: Response): Promise<void> =>
   }
 });
 
+// =============================================================================
+// ACTIVITY RECOMMENDATIONS (US-IA-004)
+// =============================================================================
+
+/**
+ * GET /api/v1/recommendations/activities
+ * Get personalized activity recommendations
+ * IA-004.3
+ */
+router.get('/activities', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { ActivityRecommendationService } = await import('../activities/services/activity-recommendation.service');
+    const activityService = new ActivityRecommendationService();
+
+    // Extract query parameters
+    const {
+      userId,
+      cityCode,
+      latitude,
+      longitude,
+      radiusKm,
+      startDate,
+      endDate,
+      stayDuration,
+      travelCompanions,
+      budgetPerActivity,
+      timeAvailable,
+      categories,
+      intensityLevels,
+      minRating,
+      maxPrice,
+      maxDuration,
+      childFriendly,
+      accessible,
+      limit,
+      diversityFactor,
+    } = req.query;
+
+    // Validate required parameters
+    if (!userId || typeof userId !== 'string') {
+      res.status(400).json({ error: 'userId query parameter is required' });
+      return;
+    }
+
+    if (!cityCode && (!latitude || !longitude)) {
+      res.status(400).json({
+        error: 'Either cityCode or location (latitude, longitude) is required'
+      });
+      return;
+    }
+
+    // Build search params
+    const searchParams: any = {};
+    if (cityCode) {
+      searchParams.cityCode = cityCode;
+    } else if (latitude && longitude) {
+      searchParams.location = {
+        latitude: parseFloat(latitude as string),
+        longitude: parseFloat(longitude as string),
+        radiusKm: radiusKm ? parseFloat(radiusKm as string) : 50,
+      };
+    }
+
+    if (startDate && endDate) {
+      searchParams.dates = {
+        startDate: startDate as string,
+        endDate: endDate as string,
+      };
+    }
+
+    // Build trip context
+    const tripContext: any = {};
+    if (stayDuration) tripContext.stayDuration = parseInt(stayDuration as string, 10);
+    if (travelCompanions) tripContext.travelCompanions = travelCompanions as string;
+    if (budgetPerActivity) tripContext.budgetPerActivity = parseFloat(budgetPerActivity as string);
+    if (timeAvailable) tripContext.timeAvailable = parseInt(timeAvailable as string, 10);
+
+    // Build filters
+    const filters: any = {};
+    if (categories) {
+      filters.categories = Array.isArray(categories) ? categories : [categories];
+    }
+    if (intensityLevels) {
+      filters.intensityLevels = Array.isArray(intensityLevels) ? intensityLevels : [intensityLevels];
+    }
+    if (minRating) filters.minRating = parseFloat(minRating as string);
+    if (maxPrice) filters.maxPrice = parseFloat(maxPrice as string);
+    if (maxDuration) filters.maxDuration = parseInt(maxDuration as string, 10);
+    if (childFriendly !== undefined) filters.childFriendly = childFriendly === 'true';
+    if (accessible !== undefined) filters.accessible = accessible === 'true';
+
+    // Get recommendations
+    const recommendations = await activityService.getRecommendations({
+      userId,
+      searchParams,
+      tripContext: Object.keys(tripContext).length > 0 ? tripContext : undefined,
+      filters: Object.keys(filters).length > 0 ? filters : undefined,
+      limit: limit ? parseInt(limit as string, 10) : 20,
+      diversityFactor: diversityFactor ? parseFloat(diversityFactor as string) : undefined,
+    });
+
+    res.json(recommendations);
+  } catch (error) {
+    console.error('[ActivityRecommendations] Error:', error);
+    res.status(500).json({
+      error: 'Failed to get activity recommendations',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * POST /api/v1/recommendations/activities/interactions
+ * Track user interaction with an activity recommendation
+ * IA-004.3
+ */
+router.post('/activities/interactions', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { ActivityRecommendationService } = await import('../activities/services/activity-recommendation.service');
+    const activityService = new ActivityRecommendationService();
+
+    const { userId, activityId, type } = req.body;
+
+    // Validate required fields
+    if (!userId || !activityId || !type) {
+      res.status(400).json({
+        error: 'userId, activityId, and type are required',
+        validTypes: ['view', 'click', 'book', 'like', 'dislike', 'wishlist']
+      });
+      return;
+    }
+
+    // Validate interaction type
+    const validTypes = ['view', 'click', 'book', 'like', 'dislike', 'wishlist'];
+    if (!validTypes.includes(type)) {
+      res.status(400).json({
+        error: `Invalid interaction type: ${type}`,
+        validTypes
+      });
+      return;
+    }
+
+    // Track interaction
+    await activityService.trackInteraction(userId, activityId, type);
+
+    res.json({
+      success: true,
+      message: 'Interaction tracked successfully',
+      userId,
+      activityId,
+      type,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[ActivityInteraction] Error:', error);
+    res.status(500).json({
+      error: 'Failed to track interaction',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/recommendations/activities/status
+ * Get activity recommendation service health status
+ * IA-004.3
+ */
+router.get('/activities/status', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { ActivityRecommendationService } = await import('../activities/services/activity-recommendation.service');
+    const activityService = new ActivityRecommendationService();
+
+    const status = await activityService.getStatus();
+
+    res.json(status);
+  } catch (error) {
+    console.error('[ActivityStatus] Error:', error);
+    res.status(500).json({
+      error: 'Failed to get service status',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
 export default router;

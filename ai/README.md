@@ -61,8 +61,30 @@ src/
 │       ├── segment.types.ts       # Énumérations segments
 │       └── segment-profile.types.ts # Profils de segments
 │
-└── onboarding/
-    └── onboarding-to-vector.service.ts # Conversion onboarding → vecteurs enrichis
+├── onboarding/
+│   └── onboarding-to-vector.service.ts # Conversion onboarding → vecteurs enrichis
+│
+├── activities/                     # 🆕 US-IA-004
+│   ├── services/
+│   │   ├── activity-vectorizer.service.ts      # Vectorisation 8D activités
+│   │   ├── activity-scoring.service.ts         # Scoring multi-facteurs
+│   │   └── activity-recommendation.service.ts  # Orchestrateur
+│   └── types/
+│       └── activity-vector.types.ts # Types et interfaces activités
+│
+├── accommodations/                 # US-IA-003 (en cours)
+│   ├── services/
+│   │   ├── accommodation-vectorizer.service.ts
+│   │   ├── accommodation-scoring.service.ts
+│   │   └── accommodation-recommendation.service.ts
+│   └── types/
+│       └── accommodation-vector.types.ts
+│
+└── routes/
+    ├── recommendations.ts          # Routes destinations + activités
+    ├── accommodations.ts           # Routes hébergements
+    ├── onboarding.ts              # Routes onboarding
+    └── health.ts                  # Health checks
 ```
 
 ## 🔧 Services implémentés
@@ -373,6 +395,112 @@ export async function getColdStartRecommendations(req, res) {
 - `src/recommendations/popularity.service.ts`
 - `src/recommendations/popularity-cache.service.ts`
 - Tests : `dreamscape-tests/tests/US-IA-002-cold-start/`
+
+### US-IA-004 : Activity Recommendations ✅ (DR-76)
+
+**Fonctionnalités** :
+- ✅ Vectorisation d'activités (8D compatible avec UserVector)
+- ✅ Scoring hybride (similarité + popularité + qualité + contexte)
+- ✅ Prise en compte du contexte de voyage (durée, budget, compagnons)
+- ✅ Segment boosts pour personnalisation
+- ✅ Diversité via MMR (Maximum Marginal Relevance)
+- ✅ Explainability avec raisons personnalisées
+- ✅ API endpoints REST
+- ✅ Tests unitaires (21 tests)
+
+**Architecture** :
+```
+activities/
+├── services/
+│   ├── activity-vectorizer.service.ts      # Vectorisation 8D des activités
+│   ├── activity-scoring.service.ts         # Scoring multi-facteurs
+│   └── activity-recommendation.service.ts  # Orchestrateur principal
+└── types/
+    └── activity-vector.types.ts            # Types et interfaces
+```
+
+**Algorithme de scoring** :
+```
+finalScore = (
+  50% × similarityScore +      // Cosine similarity avec UserVector
+  25% × popularityScore +      // Rating, reviews, bookings
+  15% × qualityScore +         // Instant confirmation, features
+  10% × contextualScore        // Duration match, budget fit, companions
+) × segmentBoost               // 0.3-1.4× selon segment utilisateur
+```
+
+**API Endpoints** :
+- `GET /api/v1/recommendations/activities` - Recommandations personnalisées
+  - Query params : `userId`, `cityCode`, `stayDuration`, `travelCompanions`, `budgetPerActivity`, etc.
+- `POST /api/v1/recommendations/activities/interactions` - Tracking (view/click/book)
+- `GET /api/v1/recommendations/activities/status` - Health check
+
+**Exemple d'utilisation** :
+```typescript
+import { ActivityRecommendationService } from '@ai/activities/services/activity-recommendation.service';
+
+const service = new ActivityRecommendationService();
+
+const recommendations = await service.getRecommendations({
+  userId: 'user123',
+  searchParams: { cityCode: 'PAR' },
+  tripContext: {
+    stayDuration: 3,
+    travelCompanions: 'family',
+    budgetPerActivity: 60,
+    timeAvailable: 180  // 3 hours
+  },
+  filters: {
+    categories: ['MUSEUM', 'FOOD_TOUR'],
+    childFriendly: true,
+    maxPrice: 100
+  },
+  limit: 20
+});
+
+// Résultat: {
+//   recommendations: [
+//     {
+//       activity: { name: 'Louvre Museum', category: 'MUSEUM', ... },
+//       score: 0.92,
+//       confidence: 0.88,
+//       reasons: ['Perfect match for your preferences', 'Family-friendly', ...],
+//       rank: 1
+//     }
+//   ],
+//   metadata: { processingTime: 245, strategy: 'hybrid' }
+// }
+```
+
+**Catégories d'activités** (40+) :
+- **Culturel** : MUSEUM, HISTORICAL_SITE, ART_GALLERY, CULTURAL_TOUR
+- **Nature** : HIKING, WILDLIFE, SAFARI, NATIONAL_PARK, BEACH
+- **Aventure** : EXTREME_SPORTS, CLIMBING, DIVING, WATER_SPORTS
+- **Gastronomie** : FOOD_TOUR, WINE_TASTING, COOKING_CLASS
+- **Entertainment** : SHOW, CONCERT, THEATER, NIGHTLIFE
+- **Famille** : THEME_PARK, AQUARIUM, ZOO, FAMILY_ACTIVITY
+- **Wellness** : SPA, YOGA, MEDITATION
+
+**Fichiers** :
+- `src/activities/services/activity-vectorizer.service.ts`
+- `src/activities/services/activity-scoring.service.ts`
+- `src/activities/services/activity-recommendation.service.ts`
+- `src/activities/types/activity-vector.types.ts`
+- `src/routes/recommendations.ts` (endpoints)
+- Tests : `dreamscape-tests/tests/DR-76-activity-recommendations/unit/`
+
+**Performance** :
+- Temps de réponse cible : < 500ms (p95)
+- Vectorisation : < 50ms pour 100 activités
+- Scoring : < 100ms pour 100 activités
+- Cache Redis : 30 min TTL
+- Batch processing optimisé
+
+**À faire (Frontend)** :
+- [ ] IA-004.4 : Composant React pour affichage des recommandations
+- [ ] Filtres interactifs (catégories, prix, durée)
+- [ ] Tracking des interactions utilisateur
+- [ ] Intégration avec booking flow
 
 ## 🗺️ Roadmap
 
