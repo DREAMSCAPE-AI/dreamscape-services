@@ -502,6 +502,188 @@ const recommendations = await service.getRecommendations({
 - [ ] Tracking des interactions utilisateur
 - [ ] Intégration avec booking flow
 
+---
+
+### US-IA-004-bis : Recommandations de Vols Personnalisées ✈️
+
+**Statut** : ✅ Implémenté (IA-004-bis.1, IA-004-bis.2, IA-004-bis.3)
+
+Système de recommandation de vols basé sur la même architecture que les activités, mais adapté aux caractéristiques spécifiques des vols : classe de cabine, escales, compagnies aériennes, ponctualité.
+
+**Fonctionnalités** :
+- ✅ Vectorisation de vols (8D compatible avec UserVector)
+- ✅ Scoring hybride (similarité + popularité + qualité + contexte)
+- ✅ Prise en compte du contexte de voyage (business/loisir, préférences horaires, budget)
+- ✅ Segment boosts pour classes de cabine
+- ✅ Diversité via MMR (compagnies, alliances, horaires)
+- ✅ Explainability avec raisons personnalisées
+- ✅ API endpoints REST
+- ✅ Tests unitaires (20 tests)
+
+**Architecture** :
+```
+flights/
+├── services/
+│   ├── flight-vectorizer.service.ts      # Vectorisation 8D des vols
+│   ├── flight-scoring.service.ts         # Scoring multi-facteurs
+│   └── flight-recommendation.service.ts  # Orchestrateur principal
+└── types/
+    └── flight-vector.types.ts            # Types et interfaces
+```
+
+**Algorithme de scoring** :
+```
+finalScore = (
+  45% × similarityScore +      // Cosine similarity avec UserVector
+  25% × popularityScore +      // Airline rating, route, on-time
+  20% × qualityScore +         // Amenities, baggage, flexibility
+  10% × contextualScore        // Timing, duration fit, price fit
+) × segmentBoost               // 0.3-1.4× selon segment et classe
+```
+
+**Dimensions du vecteur** :
+1. **Climate** (0-1) : Climat destination (froid → tropical)
+2. **Culture/Nature** (0-1) : Type destination (nature → culture)
+3. **Budget** (0-1) : Classe cabine + prix (economy → first class)
+4. **Activity Level** (0-1) : Style voyage (détendu/direct → aventureux/escales)
+5. **Group Size** (0-1) : Adaptabilité groupe (solo → famille)
+6. **Urban/Rural** (0-1) : Urbanisme destination (rural → urbain)
+7. **Gastronomy** (0-1) : Réputation culinaire destination
+8. **Popularity** (0-1) : Note compagnie + route + ponctualité
+
+**API Endpoints** :
+- `GET /api/v1/recommendations/flights` - Recommandations personnalisées
+  - Query params : `userId`, `origin`, `destination`, `departureDate`, `adults`, `tripPurpose`, `budgetPerPerson`, `preferDirectFlights`, etc.
+- `POST /api/v1/recommendations/flights/interactions` - Tracking (view/click/book/compare/save)
+- `GET /api/v1/recommendations/flights/status` - Health check
+
+**Exemple d'utilisation** :
+```typescript
+import { FlightRecommendationService } from '@ai/flights/services/flight-recommendation.service';
+
+const service = new FlightRecommendationService();
+
+const recommendations = await service.getRecommendations({
+  userId: 'user123',
+  searchParams: {
+    origin: 'CDG',
+    destination: 'JFK',
+    departureDate: '2025-06-15',
+    returnDate: '2025-06-22',
+    adults: 2,
+    travelClass: 'BUSINESS'
+  },
+  tripContext: {
+    tripPurpose: 'BUSINESS',
+    budgetPerPerson: 1500,
+    preferDirectFlights: true,
+    preferredDepartureTime: 'MORNING',
+    avoidRedEye: true
+  },
+  filters: {
+    maxStops: 1,
+    airlines: ['AF', 'BA', 'LH'],
+    requiredAmenities: ['wifi', 'power']
+  },
+  limit: 20
+});
+
+// Résultat: {
+//   recommendations: [
+//     {
+//       flight: {
+//         airline: { name: 'Air France', code: 'AF', rating: 4.5 },
+//         flightClass: 'BUSINESS',
+//         flightType: 'DIRECT',
+//         duration: { total: 510, layover: 0 },
+//         price: { amount: 1450, currency: 'EUR' }
+//       },
+//       score: 0.94,
+//       confidence: 0.91,
+//       reasons: [
+//         'Business class recommended for your travel profile',
+//         'Non-stop flight',
+//         'Excellent airline (Air France)',
+//         'Departs at your preferred time'
+//       ],
+//       rank: 1
+//     }
+//   ],
+//   metadata: { processingTime: 850, strategy: 'hybrid' },
+//   context: {
+//     fastestFlight: { duration: 480, price: 1800 },
+//     cheapestFlight: { duration: 720, price: 650 }
+//   }
+// }
+```
+
+**Classes de cabine** :
+- **ECONOMY** : Budget-friendly, sièges standard
+- **PREMIUM_ECONOMY** : Plus d'espace, services améliorés
+- **BUSINESS** : Sièges-lits, lounges, priorité
+- **FIRST_CLASS** : Suites privées, service complet
+
+**Types de vol** :
+- **DIRECT** : Sans escale
+- **ONE_STOP** : 1 escale
+- **TWO_PLUS_STOPS** : 2 escales ou plus
+
+**Alliances aériennes** :
+- **STAR_ALLIANCE** : Lufthansa, United, ANA, Singapore Airlines
+- **ONEWORLD** : American Airlines, British Airways, Qantas
+- **SKYTEAM** : Air France, KLM, Delta
+
+**Segment Boosts par classe** :
+```typescript
+LUXURY_TRAVELER: {
+  FIRST_CLASS: 1.4×,
+  BUSINESS: 1.3×,
+  PREMIUM_ECONOMY: 1.1×,
+  ECONOMY: 0.6×
+}
+
+BUSINESS_TRAVELER: {
+  BUSINESS: 1.4×,
+  PREMIUM_ECONOMY: 1.2×,
+  FIRST_CLASS: 1.1×,
+  ECONOMY: 0.9×
+}
+
+BUDGET_BACKPACKER: {
+  ECONOMY: 1.3×,
+  PREMIUM_ECONOMY: 0.8×,
+  BUSINESS: 0.5×,
+  FIRST_CLASS: 0.3×
+}
+```
+
+**Fichiers** :
+- `src/flights/services/flight-vectorizer.service.ts`
+- `src/flights/services/flight-scoring.service.ts`
+- `src/flights/services/flight-recommendation.service.ts`
+- `src/flights/types/flight-vector.types.ts`
+- `src/routes/recommendations.ts` (endpoints)
+- Tests : `dreamscape-tests/tests/DR-76-activity-recommendations/unit/flight-*.test.ts`
+
+**Performance** :
+- Temps de réponse cible : < 1000ms (p95)
+- Vectorisation : < 80ms pour 100 vols
+- Scoring : < 150ms pour 100 vols
+- Cache Redis : 30 min TTL (prix volatiles)
+- Timeout Amadeus : 8 secondes
+
+**Contexte de scoring** :
+- **Timing** : Heure de départ préférée, éviter red-eye
+- **Duration Fit** : Préférence vol direct vs connexions, tolérance escales
+- **Price Fit** : Courbe non-linéaire (70-100% du budget = optimal)
+
+**À faire (Frontend)** :
+- [ ] IA-004-bis.4 : Composant React pour affichage des vols
+- [ ] Filtres avancés (horaires, escales, compagnies, alliances)
+- [ ] Comparateur de vols (side-by-side)
+- [ ] Intégration calendrier prix
+- [ ] Alertes prix et disponibilité
+
 ## 🗺️ Roadmap
 
 ### Prochains tickets suggérés
