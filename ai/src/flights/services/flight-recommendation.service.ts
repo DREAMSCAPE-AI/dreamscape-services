@@ -449,16 +449,18 @@ export class FlightRecommendationService {
       }
 
       // Process favorites by type
+      type FavoriteItem = { entityType: string; entityId: string; entityData: any };
+
       const processedFavorites = {
         destinations: favorites
-          .filter(f => f.entityType === 'DESTINATION')
-          .map(f => f.entityId),
+          .filter((f: FavoriteItem) => f.entityType === 'DESTINATION')
+          .map((f: FavoriteItem) => f.entityId),
 
         airlines: [
           // From favorite flights
           ...favorites
-            .filter(f => f.entityType === 'FLIGHT')
-            .map(f => {
+            .filter((f: FavoriteItem) => f.entityType === 'FLIGHT')
+            .map((f: FavoriteItem) => {
               const flightData = f.entityData as any;
               return flightData?.airline || flightData?.carrierCode;
             })
@@ -466,12 +468,12 @@ export class FlightRecommendationService {
         ],
 
         hotels: favorites
-          .filter(f => f.entityType === 'HOTEL')
-          .map(f => f.entityId),
+          .filter((f: FavoriteItem) => f.entityType === 'HOTEL')
+          .map((f: FavoriteItem) => f.entityId),
 
         activities: favorites
-          .filter(f => f.entityType === 'ACTIVITY')
-          .map(f => f.entityId),
+          .filter((f: FavoriteItem) => f.entityType === 'ACTIVITY')
+          .map((f: FavoriteItem) => f.entityId),
       };
 
       // Process preferences (merge with favorites)

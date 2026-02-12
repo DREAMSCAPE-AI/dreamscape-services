@@ -328,10 +328,14 @@ export interface FlightRecommendationResponse {
 
   metadata: {
     processingTime: number;         // milliseconds
-    strategy: string;               // "hybrid" | "popularity_fallback"
+    strategy: string;               // "hybrid" | "popularity_fallback" | "hybrid_with_favorites"
     cacheHit: boolean;
     amadeusResponseTime?: number;
     scoringTime?: number;
+    favoritesUsed?: {                // Enriched user data used
+      destinations: number;
+      airlines: number;
+    };
   };
 
   // Search context summary
