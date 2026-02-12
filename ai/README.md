@@ -301,6 +301,9 @@ Le service utilise TypeScript avec `tsconfig.json` configuré pour :
 Créer un fichier `.env` (si nécessaire) :
 
 ```env
+# Server
+PORT=3005
+
 # Database (géré par @dreamscape/db)
 DATABASE_URL="postgresql://..."
 
