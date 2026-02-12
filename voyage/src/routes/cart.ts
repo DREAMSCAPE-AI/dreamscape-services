@@ -326,7 +326,7 @@ router.post('/checkout', async (req: Request, res: Response): Promise<void> => {
     // - Return 409 Conflict if any item is no longer available
 
     // Step 1: Create Stripe Payment Intent via Payment Service
-    const PAYMENT_SERVICE_URL = process.env.PAYMENT_SERVICE_URL || 'http://localhost:3005';
+    const PAYMENT_SERVICE_URL = process.env.PAYMENT_SERVICE_URL || 'http://localhost:3004';
 
     let paymentIntent: {
       paymentIntentId: string;
@@ -378,7 +378,7 @@ router.post('/checkout', async (req: Request, res: Response): Promise<void> => {
       res.status(503).json({
         error: 'Failed to initialize payment',
         message: isConnectionError
-          ? 'Payment service is not available. Please ensure the payment service is running on port 3005.'
+          ? 'Payment service is not available. Please ensure the payment service is running on port 3004.'
           : (paymentError instanceof Error ? paymentError.message : 'Payment service unavailable')
       });
       return;
