@@ -117,9 +117,9 @@ export class FlightRecommendationService {
         }
       }
 
-      // Step 2: Fetch user vector and segment
+      // Step 2: Fetch user vector, segment, favorites, and preferences
       const userVectorStart = Date.now();
-      const { userVector, userSegment } = await this.fetchUserPreferences(options.userId);
+      const { userVector, userSegment, favorites, preferences } = await this.fetchUserPreferences(options.userId);
       metrics.userVectorFetchTime = Date.now() - userVectorStart;
 
       if (!userVector || userVector.length !== 8) {
@@ -127,9 +127,23 @@ export class FlightRecommendationService {
         return await this.getFallbackRecommendations(options, metrics);
       }
 
-      // Step 3: Search flights via Amadeus (through Voyage service)
+      // Step 3: Enrich search filters with user preferences
+      const enrichedFilters = {
+        ...options.filters,
+        // Add preferred airlines to filters if available
+        airlines: preferences?.preferredAirlines?.length
+          ? [
+              ...(options.filters?.airlines || []),
+              ...preferences.preferredAirlines,
+            ]
+          : options.filters?.airlines,
+        // Add budget constraint if available
+        maxPrice: preferences?.budgetRange?.max || options.filters?.maxPrice,
+      };
+
+      // Step 4: Search flights via Amadeus (through Voyage service)
       const amadeusStart = Date.now();
-      const flights = await this.searchFlights(options.searchParams, options.filters);
+      const flights = await this.searchFlights(options.searchParams, enrichedFilters);
       metrics.amadeusSearchTime = Date.now() - amadeusStart;
 
       if (flights.length === 0) {
@@ -145,7 +159,7 @@ export class FlightRecommendationService {
         };
       }
 
-      // Step 4: Vectorize flights
+      // Step 5: Vectorize flights
       const vectorizationStart = Date.now();
       const flightsWithVectors = flights.map(flight => ({
         features: flight,
@@ -153,18 +167,24 @@ export class FlightRecommendationService {
       }));
       metrics.vectorizationTime = Date.now() - vectorizationStart;
 
-      // Step 5: Score and rank
+      // Step 6: Score and rank with enriched context
       const scoringStart = Date.now();
       const scoredFlights = await this.scorer.scoreFlights(
         userVector,
         userSegment,
         flightsWithVectors,
-        options.tripContext,
+        {
+          ...options.tripContext,
+          // Add favorite destinations to boost similar routes
+          favoriteDestinations: favorites?.destinations,
+          // Add preferred airlines for boosting
+          preferredAirlines: preferences?.preferredAirlines,
+        },
         options.limit || 20
       );
       metrics.scoringTime = Date.now() - scoringStart;
 
-      // Step 6: Build response
+      // Step 7: Build response
       metrics.totalTime = Date.now() - startTime;
 
       const response: FlightRecommendationResponse = {
@@ -173,10 +193,14 @@ export class FlightRecommendationService {
         recommendations: scoredFlights,
         metadata: {
           processingTime: metrics.totalTime,
-          strategy: 'hybrid',
+          strategy: 'hybrid_with_favorites',
           cacheHit: false,
           amadeusResponseTime: metrics.amadeusSearchTime,
           scoringTime: metrics.scoringTime,
+          favoritesUsed: favorites ? {
+            destinations: favorites.destinations.length,
+            airlines: preferences?.preferredAirlines?.length || 0,
+          } : undefined,
         },
         context: {
           totalFlightsFound: flights.length,
@@ -189,12 +213,12 @@ export class FlightRecommendationService {
         },
       };
 
-      // Step 7: Cache results
+      // Step 8: Cache results
       if (this.cache) {
         await this.cacheRecommendations(cacheKey, response, 1800); // 30 min TTL
       }
 
-      // Step 8: Log metrics
+      // Step 9: Log metrics
       await this.logPerformanceMetrics(options.userId, metrics);
 
       return response;
@@ -354,27 +378,129 @@ export class FlightRecommendationService {
   // ==========================================================================
 
   /**
-   * Fetch user preferences (vector + segment)
+   * Fetch user preferences from database
+   *
+   * Retrieves:
+   * - UserVector (ML-based 8D preferences)
+   * - User segment (FAMILY_EXPLORER, CULTURAL_ENTHUSIAST, etc.)
+   * - Favorites (destinations, airlines, hotels, activities)
+   * - UserPreferences (preferred airlines, cabin class, budget)
+   *
+   * These enriched preferences help the AI:
+   * - Prioritize favorite destinations and airlines
+   * - Respect budget constraints
+   * - Match cabin class preferences
+   * - Recommend similar places to favorited hotels/activities
    */
   private async fetchUserPreferences(
     userId: string
-  ): Promise<{ userVector: number[]; userSegment: string }> {
+  ): Promise<{
+    userVector: number[];
+    userSegment: string;
+    favorites?: {
+      destinations: string[];
+      airlines: string[];
+      hotels: string[];
+      activities: string[];
+    };
+    preferences?: {
+      preferredAirlines: string[];
+      preferredCabinClass?: string;
+      budgetRange?: { min: number; max: number };
+    };
+  }> {
     try {
-      const userVector = await prisma.userVector.findUnique({
-        where: { userId },
-        select: {
-          vector: true,
-          primarySegment: true,
-        },
-      });
+      // Fetch user vector, favorites, and preferences in parallel
+      const [userVector, favorites, userPreferences] = await Promise.all([
+        // Get user vector and segment
+        prisma.userVector.findUnique({
+          where: { userId },
+          select: {
+            vector: true,
+            primarySegment: true,
+          },
+        }),
+
+        // Get user favorites
+        prisma.favorite.findMany({
+          where: { userId },
+          select: {
+            entityType: true,
+            entityId: true,
+            entityData: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 50, // Limit to recent favorites
+        }),
+
+        // Get user preferences
+        prisma.userPreferences.findUnique({
+          where: { userId },
+          select: {
+            preferredAirlines: true,
+            preferredCabinClass: true,
+            budgetRange: true,
+          },
+        }),
+      ]);
 
       if (!userVector) {
         throw new Error('User vector not found');
       }
 
+      // Process favorites by type
+      const processedFavorites = {
+        destinations: favorites
+          .filter(f => f.entityType === 'DESTINATION')
+          .map(f => f.entityId),
+
+        airlines: [
+          // From favorite flights
+          ...favorites
+            .filter(f => f.entityType === 'FLIGHT')
+            .map(f => {
+              const flightData = f.entityData as any;
+              return flightData?.airline || flightData?.carrierCode;
+            })
+            .filter(Boolean) as string[],
+        ],
+
+        hotels: favorites
+          .filter(f => f.entityType === 'HOTEL')
+          .map(f => f.entityId),
+
+        activities: favorites
+          .filter(f => f.entityType === 'ACTIVITY')
+          .map(f => f.entityId),
+      };
+
+      // Process preferences (merge with favorites)
+      const processedPreferences = {
+        preferredAirlines: [
+          ...(userPreferences?.preferredAirlines || []),
+          ...processedFavorites.airlines,
+        ],
+        preferredCabinClass: userPreferences?.preferredCabinClass || undefined,
+        budgetRange: userPreferences?.budgetRange
+          ? (userPreferences.budgetRange as { min: number; max: number })
+          : undefined,
+      };
+
+      console.log(`[FlightRecommendation] Fetched enriched preferences for user ${userId}:`, {
+        hasVector: !!userVector,
+        segment: userVector.primarySegment,
+        favoritesCount: favorites.length,
+        favoriteDestinations: processedFavorites.destinations.length,
+        favoriteAirlines: processedPreferences.preferredAirlines.length,
+        hasPreferences: !!userPreferences,
+        budgetRange: processedPreferences.budgetRange,
+      });
+
       return {
         userVector: userVector.vector as number[],
         userSegment: userVector.primarySegment || 'CULTURAL_ENTHUSIAST',
+        favorites: processedFavorites,
+        preferences: processedPreferences,
       };
     } catch (error) {
       console.error(`Failed to fetch user preferences for ${userId}:`, error);
