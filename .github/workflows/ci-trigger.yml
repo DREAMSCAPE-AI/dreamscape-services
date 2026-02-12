@@ -130,7 +130,7 @@ jobs:
         run: |
           case "${{ github.ref }}" in
             refs/heads/main)
-              echo "environment=production" >> $GITHUB_OUTPUT
+              echo "environment=staging" >> $GITHUB_OUTPUT
               ;;
             refs/heads/develop)
               echo "environment=staging" >> $GITHUB_OUTPUT
