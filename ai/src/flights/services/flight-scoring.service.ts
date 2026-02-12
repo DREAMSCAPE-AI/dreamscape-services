@@ -133,6 +133,9 @@ export interface TripContext {
   preferredDepartureTime?: 'MORNING' | 'AFTERNOON' | 'EVENING' | 'NIGHT';
   avoidRedEye?: boolean;
   travelCompanions?: string;      // "solo", "couple", "family", "friends"
+  // Enriched from user favorites and preferences
+  favoriteDestinations?: string[];  // IATA codes of favorite destinations
+  preferredAirlines?: string[];     // Airline codes from preferences/favorites
 }
 
 /**
