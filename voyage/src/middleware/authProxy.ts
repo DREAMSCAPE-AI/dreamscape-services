@@ -8,7 +8,7 @@ export interface AuthRequest extends Request {
   };
 }
 
-const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://localhost:3001';
+const AUTH_SERVICE_URL = process.env.VITE_AUTH_SERVICE_URL;
 
 export const authenticateToken = async (
   req: AuthRequest,
@@ -28,7 +28,7 @@ export const authenticateToken = async (
     }
 
     // Verify token with auth-service
-    const response = await axios.post(`${AUTH_SERVICE_URL}/api/v1/auth/verify-token`, {}, {
+    const response = await axios.post(`${AUTH_SERVICE_URL}/v1/auth/verify-token`, {}, {
       headers: {
         'Authorization': `Bearer ${token}`
       },
@@ -85,8 +85,7 @@ export const optionalAuth = async (
       return;
     }
 
-    // Try to verify token with auth-service
-    const response = await axios.post(`${AUTH_SERVICE_URL}/api/v1/auth/verify-token`, {}, {
+    const response = await axios.post(`${AUTH_SERVICE_URL}/v1/auth/verify-token`, {}, {
       headers: {
         'Authorization': `Bearer ${token}`
       },
