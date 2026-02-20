@@ -83,10 +83,11 @@ export const KAFKA_TOPICS = {
   AI_PREDICTION_MADE: 'dreamscape.ai.prediction.made',
   AI_USER_BEHAVIOR_ANALYZED: 'dreamscape.ai.user.behavior.analyzed',
 
-  // Notification Events (for future notification service)
+  // Notification Events
   NOTIFICATION_EMAIL_REQUESTED: 'dreamscape.notification.email.requested',
   NOTIFICATION_SMS_REQUESTED: 'dreamscape.notification.sms.requested',
   NOTIFICATION_PUSH_REQUESTED: 'dreamscape.notification.push.requested',
+  NOTIFICATION_INAPP_CREATED: 'dreamscape.notification.inapp.created',
 
   // GDPR/Compliance Events
   GDPR_CONSENT_UPDATED: 'dreamscape.user.consent.updated',

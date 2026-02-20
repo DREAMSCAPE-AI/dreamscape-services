@@ -21,6 +21,7 @@ import {
   type GdprConsentUpdatedPayload,
   type GdprExportRequestedPayload,
   type GdprDeletionRequestedPayload,
+  type NotificationInAppCreatedPayload,
 } from '@dreamscape/kafka';
 
 const SERVICE_NAME = 'user-service';
@@ -252,6 +253,25 @@ class UserKafkaService {
       await this.client.subscribe(CONSUMER_GROUPS.USER_SERVICE, subscriptions);
       console.log('[UserKafkaService] Subscribed to auth events');
     }
+  }
+
+  /**
+   * Publish in-app notification created event (DR-446)
+   */
+  async publishNotificationInAppCreated(payload: NotificationInAppCreatedPayload): Promise<void> {
+    if (!this.client) {
+      console.warn('[UserKafkaService] Client not initialized, skipping publish');
+      return;
+    }
+
+    const event = createEvent(
+      'notification.inapp.created',
+      SERVICE_NAME,
+      payload,
+    );
+
+    await this.client.publish(KAFKA_TOPICS.NOTIFICATION_INAPP_CREATED, event, payload.userId);
+    console.log(`[UserKafkaService] Published notification inapp created event for user: ${payload.userId}`);
   }
 
   /**
