@@ -22,6 +22,8 @@ import {
   type GdprExportRequestedPayload,
   type GdprDeletionRequestedPayload,
   type NotificationInAppCreatedPayload,
+  type PaymentCompletedPayload,
+  type PaymentFailedPayload,
 } from '@dreamscape/kafka';
 
 const SERVICE_NAME = 'user-service';
@@ -252,6 +254,40 @@ class UserKafkaService {
     if (subscriptions.length > 0) {
       await this.client.subscribe(CONSUMER_GROUPS.USER_SERVICE, subscriptions);
       console.log('[UserKafkaService] Subscribed to auth events');
+    }
+  }
+
+  /**
+   * Subscribe to payment events from Payment Service (DR-446)
+   */
+  async subscribeToPaymentEvents(handlers: {
+    onPaymentCompleted?: MessageHandler<PaymentCompletedPayload>;
+    onPaymentFailed?: MessageHandler<PaymentFailedPayload>;
+  }): Promise<void> {
+    if (!this.client) {
+      console.warn('[UserKafkaService] Client not initialized, cannot subscribe to payment events');
+      return;
+    }
+
+    const subscriptions: Array<{ topic: KafkaTopic; handler: MessageHandler<any> }> = [];
+
+    if (handlers.onPaymentCompleted) {
+      subscriptions.push({
+        topic: KAFKA_TOPICS.PAYMENT_COMPLETED,
+        handler: handlers.onPaymentCompleted as MessageHandler<any>,
+      });
+    }
+
+    if (handlers.onPaymentFailed) {
+      subscriptions.push({
+        topic: KAFKA_TOPICS.PAYMENT_FAILED,
+        handler: handlers.onPaymentFailed as MessageHandler<any>,
+      });
+    }
+
+    if (subscriptions.length > 0) {
+      await this.client.subscribe(CONSUMER_GROUPS.USER_SERVICE, subscriptions);
+      console.log('[UserKafkaService] Subscribed to payment events');
     }
   }
 

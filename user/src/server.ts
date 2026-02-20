@@ -19,6 +19,7 @@ import historyRoutes from '@routes/history';
 import gdprRoutes from './routes/gdpr';
 import notificationRoutes from './routes/notificationRoutes';
 import { socketService } from './services/SocketService';
+import notificationService from './services/NotificationService';
 import { auditLogger } from './middleware/auditLogger';
 import { apiLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/errorHandler';
@@ -108,6 +109,26 @@ const startServer = async () => {
       console.warn('⚠️  Kafka service initialization failed (continuing without Kafka):', kafkaError);
       // Continue without Kafka - service should still work
     }
+
+    // Subscribe to payment events for in-app notifications (DR-446)
+    userKafkaService.subscribeToPaymentEvents({
+      onPaymentCompleted: async (event) => {
+        const { userId, amount, currency, bookingId } = event.payload;
+        await notificationService.createNotification(userId, {
+          type: 'PAYMENT_RECEIVED',
+          title: 'Paiement confirmé',
+          message: `Votre paiement de ${amount} ${currency} pour la réservation ${bookingId} a été reçu.`,
+        }).catch(err => console.error('[server] Payment completed notification error:', err));
+      },
+      onPaymentFailed: async (event) => {
+        const { userId, amount, currency, errorMessage } = event.payload;
+        await notificationService.createNotification(userId, {
+          type: 'PAYMENT_FAILED',
+          title: 'Paiement échoué',
+          message: `Votre paiement de ${amount} ${currency} a échoué : ${errorMessage}`,
+        }).catch(err => console.error('[server] Payment failed notification error:', err));
+      },
+    }).catch(err => console.warn('[server] Could not subscribe to payment events:', err));
 
     // Create uploads directory if it doesn't exist
     const fs = require('fs');
