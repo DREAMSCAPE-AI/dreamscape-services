@@ -355,23 +355,49 @@ class AmadeusService {
 
           // Set pagination defaults
           const page = params.page || { offset: 0, limit: 10 };
-          const limit = Math.min(50, Math.max(1, page.limit || 10));
+          const limit = Math.min(20, Math.max(1, page.limit || 10));
           const offset = Math.max(0, page.offset || 0);
 
+          // DR-573: /v3/shopping/hotel-offers requires hotelIds, not cityCode.
+          // Step 1: resolve hotelIds from cityCode if needed.
+          let hotelIds = params.hotelIds;
+          if (!hotelIds && params.cityCode) {
+            console.log(`[searchHotels] Step 1 - fetching hotel IDs for cityCode=${params.cityCode}`);
+            const cityResponse = await this.api.get('/v1/reference-data/locations/hotels/by-city', {
+              params: {
+                cityCode: params.cityCode,
+                radius: params.radius || 5,
+                radiusUnit: params.radiusUnit || 'KM',
+                hotelSource: 'ALL'
+              }
+            });
+            const cityHotels: any[] = cityResponse.data?.data || [];
+            if (cityHotels.length === 0) {
+              throw new Error(`No hotels found for cityCode=${params.cityCode}`);
+            }
+            // Slice to avoid hitting Amadeus rate limits
+            hotelIds = cityHotels
+              .slice(offset, offset + limit)
+              .map((h: any) => h.hotelId)
+              .join(',');
+            console.log(`[searchHotels] Step 1 resolved ${cityHotels.length} hotels, using ${limit} from offset ${offset}`);
+          }
+
+          if (!hotelIds) {
+            throw new Error('cityCode or hotelIds is required for hotel search');
+          }
+
+          // Step 2: fetch real offers (prices, rooms, availability) for those hotel IDs
+          console.log(`[searchHotels] Step 2 - fetching offers for ${hotelIds.split(',').length} hotels`);
           const searchParams: any = {
+            hotelIds,
             checkInDate: params.checkInDate,
             checkOutDate: params.checkOutDate,
-            adults: Math.max(1, Math.min(8, params.adults ?? 1)), // Clamp between 1-8
-            roomQuantity: Math.max(1, Math.min(8, params.roomQuantity ?? 1)), // Clamp between 1-8
-            view: 'FULL_ALL_IMAGES'
+            adults: Math.max(1, Math.min(8, params.adults ?? 1)),
+            roomQuantity: Math.max(1, Math.min(8, params.roomQuantity ?? 1)),
+            view: 'FULL_ALL_IMAGES',
+            bestRateOnly: true
           };
-
-          if (params.page) {
-            searchParams.page = {
-              limit: params.page.limit,
-              offset: params.page.offset
-            };
-          }
 
           try {
             const response = await this.api.get('/v3/shopping/hotel-offers', {
@@ -379,31 +405,14 @@ class AmadeusService {
             });
             return response.data;
           } catch (error: any) {
-            // If we get a rate limit error or no city code, try the fallback
-            if (error.response?.status === 429 || !params.cityCode) {
-              throw this.handleError(error, `Hotel search for ${params.cityCode || 'coordinates'}`);
+            if (error.response?.status === 429) {
+              throw this.handleError(error, `Hotel search for ${params.cityCode || hotelIds}`);
             }
-
-            try {
-              console.log('Trying hotel list endpoint as fallback...');
-              const fallbackResponse = await this.api.get('/v1/reference-data/locations/hotels/by-city', {
-                params: {
-                  cityCode: params.cityCode,
-                  radius: params.radius || 5,
-                  radiusUnit: params.radiusUnit || 'KM',
-              hotelSource: 'ALL'
-            }
-          });
-          return fallbackResponse.data;
-        } catch (fallbackError) {
-          console.error('Hotel fallback search also failed:', fallbackError);
+            throw this.handleError(error, `Hotel offers fetch failed for ${params.cityCode || hotelIds}`);
+          }
+        } catch (error) {
           throw this.handleError(error, `Hotel search for ${params.cityCode || 'coordinates'}`);
         }
-      }
-    } catch (error) {
-      // This catch block was missing - it handles any errors from the validation logic
-      throw this.handleError(error, `Hotel search for ${params.cityCode || 'coordinates'}`);
-    }
       }
     );
   }
