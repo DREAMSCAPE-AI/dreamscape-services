@@ -322,6 +322,24 @@ export interface AIUserBehaviorAnalyzedPayload {
 }
 
 /**
+ * DR-274 : AI Recommendation Interaction Event
+ * Tracks user interactions with recommendations (view, click, book, reject)
+ */
+export interface AIRecommendationInteractedPayload {
+  interactionId: string;
+  recommendationId: string;
+  userId: string;
+  itemId: string;
+  itemType: 'destination' | 'hotel' | 'flight' | 'activity' | 'package';
+  action: 'viewed' | 'clicked' | 'booked' | 'rejected';
+  score?: number;          // Score initial de la recommandation
+  contextType?: string;    // Type de contexte (general, seasonal, weather, etc.)
+  rating?: number;         // Note utilisateur après interaction (1-5)
+  metadata?: Record<string, unknown>; // Données additionnelles (temps passé, scroll depth, etc.)
+  interactedAt: string;
+}
+
+/**
  * Notification Events
  */
 export interface NotificationEmailRequestedPayload {
@@ -444,6 +462,7 @@ export type AIRecommendationRequestedEvent = BaseEvent<AIRecommendationRequested
 export type AIRecommendationGeneratedEvent = BaseEvent<AIRecommendationGeneratedPayload>;
 export type AIPredictionMadeEvent = BaseEvent<AIPredictionMadePayload>;
 export type AIUserBehaviorAnalyzedEvent = BaseEvent<AIUserBehaviorAnalyzedPayload>;
+export type AIRecommendationInteractedEvent = BaseEvent<AIRecommendationInteractedPayload>;
 
 export type NotificationEmailRequestedEvent = BaseEvent<NotificationEmailRequestedPayload>;
 export type NotificationSMSRequestedEvent = BaseEvent<NotificationSMSRequestedPayload>;
