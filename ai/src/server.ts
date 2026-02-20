@@ -8,6 +8,7 @@ import { prisma } from '@dreamscape/db';
 import recommendationsRoutes from '@/routes/recommendations';
 // import predictionsRoutes from '@/routes/predictions'; // TODO: Fix AmadeusService import
 import healthRoutes from '@/routes/health';
+import contextRoutes from '@/context/routes/context.routes';
 import { apiLimiter } from '@/middleware/rateLimiter';
 import { errorHandler } from '@/middleware/errorHandler';
 import aiKafkaService from '@/services/KafkaService';
@@ -52,6 +53,8 @@ app.use(apiLimiter);
 // Routes
 app.use('/api/v1/recommendations', recommendationsRoutes);
 // app.use('/api/v1/predictions', predictionsRoutes); // TODO: Fix AmadeusService import
+// IA-005 : Analyse Contextuelle Simple
+app.use('/api/v1/context', contextRoutes);
 
 // Health check - INFRA-013.1
 app.use('/health', healthRoutes);
