@@ -11,6 +11,7 @@ import {
   createEvent,
   type AIRecommendationRequestedPayload,
   type AIRecommendationGeneratedPayload,
+  type AIRecommendationInteractedPayload, // DR-274
   type AIPredictionMadePayload,
   type AIUserBehaviorAnalyzedPayload,
   type VoyageSearchPerformedPayload,
@@ -97,6 +98,27 @@ class AIKafkaService {
 
     await this.client.publish(KAFKA_TOPICS.AI_RECOMMENDATION_GENERATED, event, payload.requestId);
     console.log(`[AIKafkaService] Published recommendation generated event: ${payload.requestId}`);
+  }
+
+  /**
+   * Publish recommendation interacted event
+   * DR-274: Track user interactions with recommendations
+   */
+  async publishRecommendationInteracted(payload: AIRecommendationInteractedPayload, correlationId?: string): Promise<void> {
+    if (!this.client) {
+      console.warn('[AIKafkaService] Client not initialized, skipping publish');
+      return;
+    }
+
+    const event = createEvent(
+      'ai.recommendation.interacted',
+      SERVICE_NAME,
+      payload,
+      { correlationId }
+    );
+
+    await this.client.publish(KAFKA_TOPICS.AI_RECOMMENDATION_INTERACTED, event, payload.interactionId);
+    console.log(`[AIKafkaService] Published recommendation interaction event: ${payload.action} on ${payload.recommendationId}`);
   }
 
   /**
