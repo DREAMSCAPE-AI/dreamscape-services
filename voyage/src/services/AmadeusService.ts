@@ -358,7 +358,13 @@ class AmadeusService {
           const limit = Math.min(50, Math.max(1, page.limit || 10));
           const offset = Math.max(0, page.offset || 0);
 
+          // DR-573: cityCode must be included so Amadeus knows which city to search
+          if (!params.cityCode) {
+            throw new Error('cityCode is required for hotel search');
+          }
+
           const searchParams: any = {
+            cityCode: params.cityCode,
             checkInDate: params.checkInDate,
             checkOutDate: params.checkOutDate,
             adults: Math.max(1, Math.min(8, params.adults ?? 1)), // Clamp between 1-8
