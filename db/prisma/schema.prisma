@@ -52,6 +52,9 @@ model User {
   consent           UserConsent?
   gdprRequests      GdprRequest[]
 
+  // Notifications (DR-446)
+  notifications Notification[]
+
   @@map("users")
 }
 
@@ -938,4 +941,35 @@ enum DataAccessAction {
   UPDATE
   DELETE
   EXPORT
+}
+
+// ========== NOTIFICATION MODELS (DR-446) ==========
+
+enum NotificationType {
+  BOOKING_CONFIRMED
+  BOOKING_CANCELLED
+  PAYMENT_RECEIVED
+  PAYMENT_FAILED
+  PRICE_ALERT
+  TRIP_REMINDER
+  SYSTEM
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType @default(SYSTEM)
+  title     String
+  message   String
+  read      Boolean          @default(false)
+  readAt    DateTime?
+  metadata  Json?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, read])
+  @@map("notifications")
 }

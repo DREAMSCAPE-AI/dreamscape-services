@@ -1,9 +1,12 @@
 import express from 'express';
+import { createServer } from 'http';
+import { Server as SocketServer } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import jwt from 'jsonwebtoken';
 import { prisma } from '@dreamscape/db';
 // import activitiesRoutes from './routes/activities'; // TODO: Fix AmadeusService import
 
@@ -14,6 +17,9 @@ import aiIntegrationRoutes from '@routes/aiIntegration';
 import favoritesRoutes from './routes/favorites';
 import historyRoutes from '@routes/history';
 import gdprRoutes from './routes/gdpr';
+import notificationRoutes from './routes/notificationRoutes';
+import { socketService } from './services/SocketService';
+import notificationService from './services/NotificationService';
 import { auditLogger } from './middleware/auditLogger';
 import { apiLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/errorHandler';
@@ -22,6 +28,7 @@ import { userKafkaService } from './services/KafkaService';
 dotenv.config();
 
 const app = express();
+const httpServer = createServer(app);
 const PORT = process.env.PORT || 3002;
 
 // Security middleware
@@ -70,6 +77,7 @@ app.use('/api/v1/users/history', historyRoutes);
 app.use('/api/v1/ai', aiIntegrationRoutes);
 app.use('/api/v1/users/favorites', favoritesRoutes);
 app.use('/api/v1/users/gdpr', gdprRoutes);
+app.use('/api/v1/users/notifications', notificationRoutes);
 
 // Health check routes - INFRA-013.1
 app.use('/health', healthRoutes);
@@ -102,6 +110,26 @@ const startServer = async () => {
       // Continue without Kafka - service should still work
     }
 
+    // Subscribe to payment events for in-app notifications (DR-446)
+    userKafkaService.subscribeToPaymentEvents({
+      onPaymentCompleted: async (event) => {
+        const { userId, amount, currency, bookingId } = event.payload;
+        await notificationService.createNotification(userId, {
+          type: 'PAYMENT_RECEIVED',
+          title: 'Paiement confirmé',
+          message: `Votre paiement de ${amount} ${currency} pour la réservation ${bookingId} a été reçu.`,
+        }).catch(err => console.error('[server] Payment completed notification error:', err));
+      },
+      onPaymentFailed: async (event) => {
+        const { userId, amount, currency, errorMessage } = event.payload;
+        await notificationService.createNotification(userId, {
+          type: 'PAYMENT_FAILED',
+          title: 'Paiement échoué',
+          message: `Votre paiement de ${amount} ${currency} a échoué : ${errorMessage}`,
+        }).catch(err => console.error('[server] Payment failed notification error:', err));
+      },
+    }).catch(err => console.warn('[server] Could not subscribe to payment events:', err));
+
     // Create uploads directory if it doesn't exist
     const fs = require('fs');
     const uploadsDir = 'uploads/avatars';
@@ -109,7 +137,43 @@ const startServer = async () => {
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
 
-    app.listen(PORT, () => {
+    // Initialize Socket.io
+    const io = new SocketServer(httpServer, {
+      cors: { origin: allowedOrigins, credentials: true },
+    });
+
+    socketService.initialize(io);
+
+    // Socket.io auth middleware — validates JWT before allowing connection
+    io.use(async (socket, next) => {
+      try {
+        const token = socket.handshake.auth?.token as string | undefined;
+        if (!token) return next(new Error('Authentication required'));
+
+        const secret = process.env.JWT_SECRET;
+        if (!secret) return next(new Error('Server misconfiguration'));
+
+        const decoded = jwt.verify(token, secret) as { id: string; type?: string };
+        if (decoded.type !== 'access') return next(new Error('Invalid token type'));
+
+        socket.data.userId = decoded.id;
+        next();
+      } catch {
+        next(new Error('Invalid token'));
+      }
+    });
+
+    io.on('connection', (socket) => {
+      const userId: string = socket.data.userId;
+      socket.join(`user:${userId}`);
+      console.log(`[Socket.io] User ${userId} connected`);
+
+      socket.on('disconnect', () => {
+        console.log(`[Socket.io] User ${userId} disconnected`);
+      });
+    });
+
+    httpServer.listen(PORT, () => {
       console.log(`🚀 User service running on port ${PORT}`);
     });
   } catch (error) {
@@ -123,6 +187,10 @@ const shutdown = async () => {
   console.log('\n🛑 Shutting down user service...');
 
   try {
+    // Close HTTP server (and Socket.io)
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+    console.log('✅ HTTP server closed');
+
     // Close Kafka connections
     await userKafkaService.shutdown();
     console.log('✅ Kafka service disconnected');
