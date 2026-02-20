@@ -79,6 +79,7 @@ export const KAFKA_TOPICS = {
   // AI/Recommendation Events
   AI_RECOMMENDATION_REQUESTED: 'dreamscape.ai.recommendation.requested',
   AI_RECOMMENDATION_GENERATED: 'dreamscape.ai.recommendation.generated',
+  AI_RECOMMENDATION_INTERACTED: 'dreamscape.ai.recommendation.interacted', // DR-274
   AI_PREDICTION_MADE: 'dreamscape.ai.prediction.made',
   AI_USER_BEHAVIOR_ANALYZED: 'dreamscape.ai.user.behavior.analyzed',
 

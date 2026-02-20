@@ -7,6 +7,7 @@ import { prisma, Recommendation, RecommendationStatus } from '@dreamscape/db';
 import ScoringService from './ScoringService';
 import VectorizationService from './VectorizationService';
 import CacheService from './CacheService';
+import aiKafkaService from './KafkaService'; // DR-274
 
 export interface RecommendationOptions {
   limit?: number;
@@ -144,11 +145,25 @@ export class RecommendationService {
 
   /**
    * Track user interaction with a recommendation
+   * DR-274: Publishes Kafka event for each interaction
    */
   async trackInteraction(
     recommendationId: string,
     action: TrackingAction
   ): Promise<Recommendation> {
+    // Fetch recommendation details before update
+    const rec = await prisma.recommendation.findUnique({
+      where: { id: recommendationId },
+      include: {
+        userVector: true,
+        itemVector: true,
+      },
+    });
+
+    if (!rec) {
+      throw new Error(`Recommendation ${recommendationId} not found`);
+    }
+
     const updateData: any = {
       updatedAt: new Date(),
     };
@@ -163,11 +178,7 @@ export class RecommendationService {
         updateData.status = 'CLICKED';
         updateData.clickedAt = new Date();
         // If not viewed yet, set viewedAt too
-        const existing = await prisma.recommendation.findUnique({
-          where: { id: recommendationId },
-          select: { viewedAt: true },
-        });
-        if (!existing?.viewedAt) {
+        if (!rec.viewedAt) {
           updateData.viewedAt = new Date();
         }
         break;
@@ -188,10 +199,37 @@ export class RecommendationService {
         break;
     }
 
-    return await prisma.recommendation.update({
+    const updated = await prisma.recommendation.update({
       where: { id: recommendationId },
       data: updateData,
     });
+
+    // DR-274: Publish interaction event to Kafka
+    if (rec.userVector) {
+      try {
+        await aiKafkaService.publishRecommendationInteracted({
+          interactionId: `int_${recommendationId}_${action.action}_${Date.now()}`,
+          recommendationId,
+          userId: rec.userVector.userId,
+          itemId: rec.destinationId || rec.itemVector?.destinationId || 'unknown',
+          itemType: (rec.itemVector?.destinationType as any) || 'destination',
+          action: action.action,
+          score: rec.score,
+          contextType: rec.contextType || 'general',
+          rating: action.rating,
+          metadata: {
+            confidence: rec.confidence,
+            reasons: rec.reasons,
+          },
+          interactedAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error('[RecommendationService] Failed to publish interaction event:', error);
+        // Non-critical — continue même si Kafka échoue
+      }
+    }
+
+    return updated;
   }
 
   /**
