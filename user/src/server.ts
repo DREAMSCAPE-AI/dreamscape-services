@@ -155,10 +155,10 @@ const startServer = async () => {
         const secret = process.env.JWT_SECRET;
         if (!secret) return next(new Error('Server misconfiguration'));
 
-        const decoded = jwt.verify(token, secret) as { id: string; type?: string };
+        const decoded = jwt.verify(token, secret) as { userId: string; type?: string };
         if (decoded.type !== 'access') return next(new Error('Invalid token type'));
 
-        socket.data.userId = decoded.id;
+        socket.data.userId = decoded.userId;
         next();
       } catch {
         next(new Error('Invalid token'));
