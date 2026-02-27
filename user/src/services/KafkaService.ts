@@ -311,6 +311,33 @@ class UserKafkaService {
   }
 
   /**
+   * Publish notification email requested event (DR-447)
+   */
+  async publishNotificationEmailRequested(payload: {
+    notificationId?: string;
+    userId: string;
+    type: string;
+    title: string;
+    message: string;
+    metadata?: Record<string, unknown>;
+    requestedAt: string;
+  }): Promise<void> {
+    if (!this.client) {
+      console.warn('[UserKafkaService] Client not initialized, skipping publish');
+      return;
+    }
+
+    const event = createEvent(
+      'notification.email.requested',
+      SERVICE_NAME,
+      payload,
+    );
+
+    await this.client.publish(KAFKA_TOPICS.NOTIFICATION_EMAIL_REQUESTED, event, payload.userId);
+    console.log(`[UserKafkaService] Published notification email requested event for user: ${payload.userId}`);
+  }
+
+  /**
    * Health check for Kafka connection
    */
   async healthCheck(): Promise<{ healthy: boolean; details: Record<string, unknown> }> {
