@@ -42,6 +42,36 @@ router.get('/unread-count', authenticateToken, async (req: AuthRequest, res: Res
 });
 
 /**
+ * POST /api/v1/users/notifications/internal
+ * Create a notification (service-to-service).
+ * Used by other services (e.g. voyage-service) to trigger notifications
+ * without going through Kafka.
+ * Body: { userId, type?, title, message, metadata? }
+ */
+router.post('/internal', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { userId, type, title, message, metadata } = req.body;
+
+    if (!userId || !title || !message) {
+      res.status(400).json({ success: false, message: 'Missing required fields: userId, title, message' });
+      return;
+    }
+
+    const notification = await notificationService.createNotification(userId, {
+      type,
+      title,
+      message,
+      metadata,
+    });
+
+    res.status(201).json({ success: true, data: notification });
+  } catch (error) {
+    console.error('[NotificationRoutes] POST /internal error:', error);
+    res.status(500).json({ success: false, message: 'Failed to create notification' });
+  }
+});
+
+/**
  * PATCH /api/v1/users/notifications/mark-all-read
  * Mark all notifications as read for the authenticated user.
  */

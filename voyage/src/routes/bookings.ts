@@ -347,6 +347,20 @@ router.post('/:reference/confirm', async (req: Request, res: Response): Promise<
 
     console.log(`✅ [BookingsRoutes] Booking ${reference} confirmed successfully`);
 
+    // Create in-app notification via user-service (DR-446)
+    const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3002';
+    fetch(`${USER_SERVICE_URL}/api/v1/users/notifications/internal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        type: 'BOOKING_CONFIRMED',
+        title: 'Réservation confirmée',
+        message: `Votre réservation ${reference} a été confirmée. Bon voyage !`,
+        metadata: { bookingReference: reference, bookingId: booking.id },
+      }),
+    }).catch(err => console.warn('[BookingsRoutes] Failed to create notification:', err));
+
     res.json({
       data: {
         id: booking.id,
