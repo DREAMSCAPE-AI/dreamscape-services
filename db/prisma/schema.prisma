@@ -110,11 +110,14 @@ model UserSettings {
   currency String @default("USD")
   timezone String @default("UTC")
 
-  // Notification settings
+  // Notification settings (legacy toggles)
   dealAlerts    Boolean @default(true)
   tripReminders Boolean @default(true)
   priceAlerts   Boolean @default(true)
   newsletter    Boolean @default(false)
+
+  // Granular per-type per-channel notification preferences (DR-447)
+  notificationPreferences Json?
 
   // Privacy settings
   profileVisibility String  @default("public") // public, private
@@ -950,6 +953,10 @@ enum NotificationType {
   BOOKING_CANCELLED
   PAYMENT_RECEIVED
   PAYMENT_FAILED
+  REFUND_PROCESSED
+  PROMO_OFFER
+  PLATFORM_UPDATE
+  ACCOUNT_SECURITY
   PRICE_ALERT
   TRIP_REMINDER
   SYSTEM

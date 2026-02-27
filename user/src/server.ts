@@ -18,6 +18,7 @@ import favoritesRoutes from './routes/favorites';
 import historyRoutes from '@routes/history';
 import gdprRoutes from './routes/gdpr';
 import notificationRoutes from './routes/notificationRoutes';
+import notificationPreferencesRoutes from './routes/notificationPreferencesRoutes';
 import { socketService } from './services/SocketService';
 import notificationService from './services/NotificationService';
 import { auditLogger } from './middleware/auditLogger';
@@ -78,6 +79,7 @@ app.use('/api/v1/ai', aiIntegrationRoutes);
 app.use('/api/v1/users/favorites', favoritesRoutes);
 app.use('/api/v1/users/gdpr', gdprRoutes);
 app.use('/api/v1/users/notifications', notificationRoutes);
+app.use('/api/v1/users/notification-preferences', notificationPreferencesRoutes);
 
 // Health check routes - INFRA-013.1
 app.use('/health', healthRoutes);
@@ -153,10 +155,10 @@ const startServer = async () => {
         const secret = process.env.JWT_SECRET;
         if (!secret) return next(new Error('Server misconfiguration'));
 
-        const decoded = jwt.verify(token, secret) as { id: string; type?: string };
+        const decoded = jwt.verify(token, secret) as { userId: string; type?: string };
         if (decoded.type !== 'access') return next(new Error('Invalid token type'));
 
-        socket.data.userId = decoded.id;
+        socket.data.userId = decoded.userId;
         next();
       } catch {
         next(new Error('Invalid token'));
