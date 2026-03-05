@@ -374,6 +374,15 @@ export interface NotificationPushRequestedPayload {
   requestedAt: string;
 }
 
+export interface NotificationInAppCreatedPayload {
+  notificationId: string;
+  userId: string;
+  type: string;
+  title: string;
+  message: string;
+  createdAt: string;
+}
+
 /**
  * GDPR/Compliance Events
  */

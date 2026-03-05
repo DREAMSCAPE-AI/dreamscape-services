@@ -20,6 +20,7 @@
   "devDependencies": {
     "@types/node": "^20.19.11",
     "prisma": "^6.17.1",
+    "tsx": "^4.21.0",
     "typescript": "^5.3.3"
   }
 }
