@@ -164,9 +164,9 @@ async function main() {
     },
   });
 
-  // Seed Privacy Policy (GDPR)
-  console.log('🔒 Seeding privacy policy...');
-  const privacyPolicy = await prisma.privacyPolicy.create({
+  // Seed Privacy Policy (GDPR) - COMMENTED OUT (table doesn't exist)
+  console.log('🔒 Skipping privacy policy (table not in schema)...');
+  /* const privacyPolicy = await prisma.privacyPolicy.create({
     data: {
       version: '1.0.0',
       title: 'DreamScape Privacy Policy',
@@ -253,7 +253,7 @@ Last updated: February 2026`,
       effectiveAt: new Date('2026-01-01T00:00:00Z'),
     },
   });
-  console.log(`   Created privacy policy v${privacyPolicy.version} (id: ${privacyPolicy.id})`);
+  console.log(`   Created privacy policy v${privacyPolicy.version} (id: ${privacyPolicy.id})`); */
 
   console.log('✅ Database seeding completed successfully!');
 }
