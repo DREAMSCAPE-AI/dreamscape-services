@@ -1,12 +1,12 @@
 """
 US-IA-008 - Data Loader
-Charge les données depuis PostgreSQL pour l'entraînement du modèle ML.
+Charge les données pour l'entraînement du modèle ML.
 
-Tables utilisées :
-  - user_vectors    : vecteurs de préférences utilisateurs (8D)
-  - item_vectors    : vecteurs de destinations (8D)
-  - recommendations : historique d'interactions (feedback implicite)
-  - favorites       : items favoris (signal positif fort)
+Sources supportées :
+  1. Parquet (recommandé) : sortie du pipeline ETL DR-414 (Paulin)
+       /app/data/datasets/v{version}/train_v{version}.parquet
+  2. PostgreSQL (fallback) : chargement direct depuis les tables
+       user_vectors, item_vectors, recommendations, favorites
 """
 
 import os
@@ -127,12 +127,57 @@ def load_interactions() -> pd.DataFrame:
     df = (
         df.groupby(["user_id", "item_id"], as_index=False)["rating"]
         .sum()
-        .clip(lower=-1.0, upper=5.0)
+        .assign(rating=lambda x: x["rating"].clip(-1.0, 5.0))
     )
 
     logger.info(
         f"Chargé {len(df)} interactions ({df['user_id'].nunique()} users, "
         f"{df['item_id'].nunique()} items)"
+    )
+    return df
+
+
+def load_from_parquet(dataset_version: str = "1.0") -> pd.DataFrame:
+    """
+    Charge les interactions depuis la sortie Parquet du pipeline ETL (DR-414).
+
+    Lit `/app/data/datasets/v{version}/train_v{version}.parquet` produit par
+    Paulin et le traduit en DataFrame (user_id, item_id, rating) attendu par
+    train_model.py.
+
+    Args:
+        dataset_version : version du dataset ETL (ex: "1.0")
+
+    Returns:
+        DataFrame avec colonnes : user_id, item_id, rating
+    """
+    data_dir = os.getenv("ML_DATA_DIR", "/app/data/datasets")
+    parquet_path = f"{data_dir}/v{dataset_version}/train_v{dataset_version}.parquet"
+
+    if not os.path.exists(parquet_path):
+        raise FileNotFoundError(
+            f"Dataset ETL introuvable : {parquet_path}\n"
+            f"Lancez d'abord le pipeline DR-414 : python scripts/run_etl.py"
+        )
+
+    df = pd.read_parquet(parquet_path, columns=["user_id", "itemVectorId", "engagement_score"])
+
+    # Exclure les NON_VIEWED (engagement_score == 0) — pas d'information utile
+    df = df[df["engagement_score"] != 0].copy()
+
+    df = df.rename(columns={"itemVectorId": "item_id", "engagement_score": "rating"})
+    df = df.dropna(subset=["user_id", "item_id"])
+
+    # Agréger si un user a plusieurs interactions sur le même item
+    df = (
+        df.groupby(["user_id", "item_id"], as_index=False)["rating"]
+        .sum()
+        .assign(rating=lambda x: x["rating"].clip(-1.0, 5.0))
+    )
+
+    logger.info(
+        f"[Parquet v{dataset_version}] {len(df)} interactions — "
+        f"{df['user_id'].nunique()} users, {df['item_id'].nunique()} items"
     )
     return df
 

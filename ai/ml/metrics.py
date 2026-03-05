@@ -70,14 +70,21 @@ def ndcg_at_k(recommended: list, relevant: set, k: int) -> float:
         IDCG@K = DCG du ranking idéal (tous les pertinents en premier)
         NDCG@K = DCG@K / IDCG@K
     """
-    # TODO(human): Implémenter cette fonction
-    # Étapes :
-    #   1. Calculer DCG : pour chaque position i (1 à k), si recommended[i-1]
-    #      est dans relevant, ajouter 1.0 / log2(i + 1) au gain cumulé.
-    #   2. Calculer IDCG : le DCG parfait où tous les items relevant sont
-    #      placés en premiers (min(len(relevant), k) items pertinents).
-    #   3. Retourner DCG / IDCG (ou 0.0 si IDCG == 0).
-    pass
+    if not relevant or k == 0:
+        return 0.0
+
+    dcg = sum(
+        1.0 / np.log2(i + 2)
+        for i, item in enumerate(recommended[:k])
+        if item in relevant
+    )
+
+    idcg = sum(
+        1.0 / np.log2(i + 2)
+        for i in range(min(len(relevant), k))
+    )
+
+    return dcg / idcg if idcg > 0 else 0.0
 
 
 def auc_roc(y_true: np.ndarray, y_scores: np.ndarray) -> float:
@@ -124,7 +131,7 @@ def evaluate_model(
         ndcgs.append(ndcg_at_k(recommended, relevant, k))
 
     return {
-        f"precision@{k}": float(np.mean(precisions)) if precisions else 0.0,
-        f"recall@{k}": float(np.mean(recalls)) if recalls else 0.0,
-        f"ndcg@{k}": float(np.mean(ndcgs)) if ndcgs else 0.0,
+        f"precision_at_{k}": float(np.mean(precisions)) if precisions else 0.0,
+        f"recall_at_{k}": float(np.mean(recalls)) if recalls else 0.0,
+        f"ndcg_at_{k}": float(np.mean(ndcgs)) if ndcgs else 0.0,
     }

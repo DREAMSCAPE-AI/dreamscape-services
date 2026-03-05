@@ -47,6 +47,9 @@ Thumbs.db
 .cache/
 .temp/
 .tmp/
+__pycache__/
+*.pyc
+*.pyo
 
 # Secrets
 *.pem
