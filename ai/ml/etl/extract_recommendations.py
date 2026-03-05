@@ -26,7 +26,12 @@ def extract_recommendations(data_window_days=DATA_WINDOW_DAYS):
     db_connector = get_db_connector()
     engine = db_connector.get_engine()
 
-    query = text("""
+    # Calculate cutoff date in Python to avoid INTERVAL parameter issues
+    from datetime import datetime, timedelta
+    cutoff_date = (datetime.now() - timedelta(days=data_window_days)).strftime('%Y-%m-%d %H:%M:%S')
+
+    # Build query with cutoff_date directly in SQL (safe since we control the value)
+    query_str = f"""
         SELECT
             r.id as recommendation_id,
             r."userId" as user_id,
@@ -61,11 +66,11 @@ def extract_recommendations(data_window_days=DATA_WINDOW_DAYS):
         INNER JOIN user_vectors uv ON uv."userId" = r."userId"
         LEFT JOIN item_vectors iv ON iv.id = r."itemVectorId"
 
-        WHERE r."createdAt" >= NOW() - INTERVAL :window_days DAY
-    """)
+        WHERE r."createdAt" >= '{cutoff_date}'
+    """
 
     try:
-        df = pd.read_sql(query, engine, params={'window_days': data_window_days})
+        df = pd.read_sql(query_str, engine)
 
         logger.info(f"Extracted {len(df)} recommendations")
         logger.info(f"Status distribution:\n{df['status'].value_counts()}")
@@ -75,6 +80,15 @@ def extract_recommendations(data_window_days=DATA_WINDOW_DAYS):
         has_user_rating = df['userRating'].notna().sum()
         logger.info(f"Recommendations with item vectors: {has_item_vector}")
         logger.info(f"Recommendations with user rating: {has_user_rating}")
+
+        # Convert contextData JSONB to JSON string for Parquet compatibility
+        # Parquet cannot serialize empty struct types, so we convert to string
+        import json
+        if 'contextData' in df.columns:
+            df['contextData'] = df['contextData'].apply(
+                lambda x: json.dumps(x) if pd.notna(x) and x != {} else None
+            )
+            logger.info("Converted contextData JSONB to JSON string for Parquet compatibility")
 
         return df
 

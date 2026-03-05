@@ -33,19 +33,33 @@ def split_and_export(df: pd.DataFrame, version="1.0", test_size=TEST_SIZE):
     """
     logger.info(f"Splitting dataset (test_size={test_size})")
 
-    # Stratified split on engagement_score for balanced distribution
-    train_df, test_df = train_test_split(
-        df,
-        test_size=test_size,
-        stratify=df['engagement_score'],
-        random_state=RANDOM_SEED
-    )
+    # Check if dataset is large enough for stratified split
+    # Each class needs at least 2 members for stratification
+    engagement_counts = df['engagement_score'].value_counts()
+    min_class_size = engagement_counts.min()
+    use_stratify = min_class_size >= 2 and len(df) >= 10
+
+    if use_stratify:
+        logger.info("Using stratified split on engagement_score")
+        train_df, test_df = train_test_split(
+            df,
+            test_size=test_size,
+            stratify=df['engagement_score'],
+            random_state=RANDOM_SEED
+        )
+    else:
+        logger.warning(f"Dataset too small ({len(df)} rows) or imbalanced for stratified split. Using simple random split.")
+        train_df, test_df = train_test_split(
+            df,
+            test_size=test_size,
+            random_state=RANDOM_SEED
+        )
 
     logger.info(f"Train: {len(train_df)} rows ({len(train_df)/len(df)*100:.1f}%)")
     logger.info(f"Test: {len(test_df)} rows ({len(test_df)/len(df)*100:.1f}%)")
 
-    # Create output directory
-    output_dir = f"data/datasets/v{version}"
+    # Create output directory (use absolute path from /app/)
+    output_dir = f"/app/data/datasets/v{version}"
     os.makedirs(output_dir, exist_ok=True)
 
     # Export to Parquet
@@ -108,7 +122,7 @@ def generate_metadata(train_df: pd.DataFrame, test_df: pd.DataFrame, version: st
         'compression': 'snappy'
     }
 
-    output_dir = f"data/datasets/v{version}"
+    output_dir = f"/app/data/datasets/v{version}"
     metadata_path = f"{output_dir}/metadata_v{version}.json"
 
     with open(metadata_path, 'w') as f:
@@ -129,7 +143,7 @@ def generate_quality_report(train_df: pd.DataFrame, test_df: pd.DataFrame, versi
     """
     logger.info("Generating quality report")
 
-    output_dir = f"data/datasets/v{version}"
+    output_dir = f"/app/data/datasets/v{version}"
 
     # Calculate statistics
     stats = {

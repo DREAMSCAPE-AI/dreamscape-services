@@ -44,9 +44,12 @@ RUN mkdir -p /app/data/raw /app/data/processed /app/data/datasets /app/logs && \
 
 # Environment variables
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app \
+    PYTHONPATH=/app/ml \
     DATA_DIR=/app/data \
     LOG_LEVEL=INFO
 
+# Set working directory to ml/ for imports to work
+WORKDIR /app/ml
+
 # Default command: run ETL pipeline
-CMD ["python", "ml/scripts/run_etl.py"]
+CMD ["python", "scripts/run_etl.py"]

@@ -121,12 +121,22 @@ def remove_rare_categories(df: pd.DataFrame, threshold=10):
     cat_cols = df.select_dtypes(include=['object']).columns
 
     for col in cat_cols:
-        value_counts = df[col].value_counts()
-        rare_values = value_counts[value_counts < threshold].index.tolist()
+        # Skip columns that contain array-like objects (like vectors)
+        sample_value = df[col].dropna().iloc[0] if len(df[col].dropna()) > 0 else None
+        if sample_value is not None and isinstance(sample_value, (list, tuple)):
+            logger.info(f"Skipping array column '{col}'")
+            continue
 
-        if rare_values:
-            df[col] = df[col].apply(lambda x: 'OTHER' if x in rare_values else x)
-            logger.info(f"Generalized {len(rare_values)} rare values in '{col}'")
+        try:
+            value_counts = df[col].value_counts()
+            rare_values = value_counts[value_counts < threshold].index.tolist()
+
+            if rare_values:
+                df[col] = df[col].apply(lambda x: 'OTHER' if pd.notna(x) and x in rare_values else x)
+                logger.info(f"Generalized {len(rare_values)} rare values in '{col}'")
+        except Exception as e:
+            logger.warning(f"Could not process column '{col}': {str(e)}")
+            continue
 
     return df
 

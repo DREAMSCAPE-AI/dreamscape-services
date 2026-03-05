@@ -59,13 +59,66 @@ def impute_missing_values(df: pd.DataFrame):
             df[col].fillna(median_val, inplace=True)
             logger.info(f"Imputed {missing_count} missing values in '{col}' with median {median_val:.2f}")
 
-    # Categorical columns: fill with "UNKNOWN"
-    cat_cols = df.select_dtypes(include=['object']).columns
-    for col in cat_cols:
+    # Boolean columns: fill with False (conservative approach)
+    # Note: Boolean columns with NaN values are converted to object dtype by pandas
+    # So we need to handle them explicitly by name before categorical processing
+    known_bool_cols = ['travelWithChildren', 'is_weekend', 'travel_with_children', 'isWeekend']
+    for col in known_bool_cols:
+        if col in df.columns:
+            missing_count = df[col].isna().sum()
+            if missing_count > 0:
+                df[col].fillna(False, inplace=True)
+                logger.info(f"Imputed {missing_count} missing values in boolean column '{col}' with False")
+
+    # Also handle any remaining bool dtype columns
+    bool_cols = df.select_dtypes(include=['bool']).columns
+    for col in bool_cols:
         missing_count = df[col].isna().sum()
         if missing_count > 0:
-            df[col].fillna("UNKNOWN", inplace=True)
-            logger.info(f"Imputed {missing_count} missing values in '{col}' with 'UNKNOWN'")
+            df[col].fillna(False, inplace=True)
+            logger.info(f"Imputed {missing_count} missing values in '{col}' with False")
+
+    # Categorical columns: fill with "UNKNOWN", but skip JSONB, boolean, and array columns
+    cat_cols = df.select_dtypes(include=['object']).columns
+
+    # Detect JSONB/array columns (those containing dict or list objects)
+    # Check multiple samples (up to 10) to catch columns with mixed types
+    jsonb_cols = []
+    array_cols = []
+    for col in cat_cols:
+        non_null = df[col].dropna()
+        if len(non_null) > 0:
+            # Check up to 10 samples to detect lists/dicts
+            samples_to_check = min(10, len(non_null))
+            for i in range(samples_to_check):
+                sample = non_null.iloc[i]
+                if isinstance(sample, dict):
+                    if col not in jsonb_cols:
+                        jsonb_cols.append(col)
+                    break
+                elif isinstance(sample, list):
+                    if col not in array_cols:
+                        array_cols.append(col)
+                    break
+
+    for col in cat_cols:
+        # Skip boolean columns that were already handled
+        if col in known_bool_cols:
+            continue
+
+        missing_count = df[col].isna().sum()
+        if missing_count > 0:
+            if col in jsonb_cols:
+                # For JSONB columns, drop them (not critical for ML)
+                logger.info(f"Skipping imputation for JSONB column '{col}' ({missing_count} missing)")
+                df = df.drop(columns=[col])
+            elif col in array_cols:
+                # For array columns, drop them (can't be imputed with string)
+                logger.info(f"Skipping imputation for array column '{col}' ({missing_count} missing)")
+                df = df.drop(columns=[col])
+            else:
+                df[col].fillna("UNKNOWN", inplace=True)
+                logger.info(f"Imputed {missing_count} missing values in '{col}' with 'UNKNOWN'")
 
     return df
 
@@ -163,6 +216,13 @@ def clean_dataset(df: pd.DataFrame):
         pd.DataFrame: Cleaned DataFrame
     """
     logger.info(f"Starting data cleaning on {len(df)} rows")
+
+    # Drop problematic array columns that can't be easily imputed
+    problematic_cols = ['climatePreferences', 'riskTolerance']
+    for col in problematic_cols:
+        if col in df.columns:
+            df = df.drop(columns=[col])
+            logger.info(f"Dropped problematic array column '{col}'")
 
     df = remove_missing_required(df)
     df = impute_missing_values(df)

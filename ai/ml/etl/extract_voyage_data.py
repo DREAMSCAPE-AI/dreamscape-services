@@ -25,8 +25,12 @@ def extract_voyage_data(data_window_days=DATA_WINDOW_DAYS):
     db_connector = get_db_connector()
     engine = db_connector.get_engine()
 
-    # Extract SearchHistory
-    search_query = text("""
+    # Calculate cutoff date in Python to avoid INTERVAL parameter issues
+    from datetime import datetime, timedelta
+    cutoff_date = (datetime.now() - timedelta(days=data_window_days)).strftime('%Y-%m-%d %H:%M:%S')
+
+    # Extract SearchHistory - build query with cutoff_date directly in SQL (safe since we control the value)
+    search_query_str = f"""
         SELECT
             sh.id as search_id,
             sh."userId" as user_id,
@@ -40,14 +44,14 @@ def extract_voyage_data(data_window_days=DATA_WINDOW_DAYS):
             sh."resultsCount"
 
         FROM search_history sh
-        WHERE sh."searchedAt" >= NOW() - INTERVAL :window_days DAY
+        WHERE sh."searchedAt" >= '{cutoff_date}'
           AND sh."userId" IS NOT NULL
 
         ORDER BY sh."userId", sh."searchedAt" DESC
-    """)
+    """
 
     try:
-        searches_df = pd.read_sql(search_query, engine, params={'window_days': data_window_days})
+        searches_df = pd.read_sql(search_query_str, engine)
         logger.info(f"Extracted {len(searches_df)} search records")
 
         # Keep only the most recent search per user

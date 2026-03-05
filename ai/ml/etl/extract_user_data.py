@@ -27,13 +27,18 @@ def extract_user_data(data_window_days=DATA_WINDOW_DAYS):
     db_connector = get_db_connector()
     engine = db_connector.get_engine()
 
-    query = text("""
+    # Calculate cutoff date in Python to avoid INTERVAL parameter issues
+    from datetime import datetime, timedelta
+    cutoff_date = (datetime.now() - timedelta(days=data_window_days)).strftime('%Y-%m-%d %H:%M:%S')
+
+    # Build query with cutoff_date directly in SQL (safe since we control the value)
+    query_str = f"""
         SELECT
             u.id as user_id,
             u."dateOfBirth",
             u.nationality,
             u."userCategory",
-            u."createdAt" as user_created_at,
+            u.created_at as user_created_at,
 
             -- UserVector (8D features)
             uv.vector as user_vector,
@@ -65,17 +70,17 @@ def extract_user_data(data_window_days=DATA_WINDOW_DAYS):
         LEFT JOIN travel_onboarding_profiles top ON top."userId" = u.id
         LEFT JOIN user_preferences up ON up."userId" = u.id
         LEFT JOIN search_history sh ON sh."userId" = u.id
-            AND sh."searchedAt" >= NOW() - INTERVAL :window_days DAY
+            AND sh."searchedAt" >= '{cutoff_date}'
         LEFT JOIN booking_data bd ON bd."userId" = u.id
 
         WHERE u."onboardingCompleted" = TRUE
           AND uv.id IS NOT NULL
 
         GROUP BY u.id, uv.id, top.id, up.id
-    """)
+    """
 
     try:
-        df = pd.read_sql(query, engine, params={'window_days': data_window_days})
+        df = pd.read_sql(query_str, engine)
 
         logger.info(f"Extracted {len(df)} users")
         logger.info(f"Columns: {list(df.columns)}")

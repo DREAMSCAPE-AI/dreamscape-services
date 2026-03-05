@@ -8,9 +8,9 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 def merge_datasets(
-    users_path="data/raw/users.parquet",
-    recommendations_path="data/raw/recommendations.parquet",
-    searches_path="data/raw/searches.parquet"
+    users_path="/app/data/raw/users.parquet",
+    recommendations_path="/app/data/raw/recommendations.parquet",
+    searches_path="/app/data/raw/searches.parquet"
 ):
     """
     Merge user, recommendation, and search data
