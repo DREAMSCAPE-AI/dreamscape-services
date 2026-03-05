@@ -7,8 +7,8 @@ import databaseService from './services/DatabaseService';
 import paymentRoutes from './routes/payment';
 import { rawBodyMiddleware } from './middleware/rawBody';
 
-// Load environment variables
-dotenv.config();
+// Load environment variables (override: true ensures .env takes precedence over shell env vars)
+dotenv.config({ override: true });
 
 const app = express();
 const PORT = process.env.PORT || 3004;

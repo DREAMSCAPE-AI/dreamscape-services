@@ -1,6 +1,12 @@
 import { prisma } from '@dreamscape/db';
 import { socketService } from './SocketService';
 import { userKafkaService } from './KafkaService';
+import {
+  NotificationPreferences,
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  NOTIFICATION_TYPE_TO_PREF_KEY,
+  ALWAYS_ON_TYPES,
+} from '../types/notificationPreferences';
 
 type NotificationFilter = 'all' | 'unread' | 'read';
 
@@ -62,6 +68,36 @@ class NotificationService {
     });
   }
 
+  /**
+   * Check whether a notification should be sent for a given type and channel.
+   * Always-on types (ACCOUNT_SECURITY, SYSTEM, PRICE_ALERT, TRIP_REMINDER) always return true.
+   */
+  async shouldSend(
+    userId: string,
+    type: string,
+    channel: 'inApp' | 'email',
+  ): Promise<boolean> {
+    if (ALWAYS_ON_TYPES.has(type)) return true;
+
+    const prefKey = NOTIFICATION_TYPE_TO_PREF_KEY[type];
+    if (!prefKey) return true; // Unknown type — default to sending
+
+    try {
+      const settings = await prisma.userSettings.findUnique({
+        where: { userId },
+        select: { notificationPreferences: true },
+      });
+
+      const prefs = (settings?.notificationPreferences as NotificationPreferences | null)
+        ?? DEFAULT_NOTIFICATION_PREFERENCES;
+
+      return prefs[prefKey]?.[channel] ?? true;
+    } catch (error) {
+      console.error('[NotificationService] shouldSend error, defaulting to true:', error);
+      return true;
+    }
+  }
+
   async createNotification(
     userId: string,
     data: {
@@ -71,10 +107,34 @@ class NotificationService {
       metadata?: Record<string, unknown>;
     },
   ) {
+    const notificationType = data.type ?? 'SYSTEM';
+
+    // Check in-app preference before creating
+    const shouldCreateInApp = await this.shouldSend(userId, notificationType, 'inApp');
+    if (!shouldCreateInApp) {
+      // Still check if email should be sent even if in-app is disabled
+      const shouldSendEmail = await this.shouldSend(userId, notificationType, 'email');
+      if (shouldSendEmail) {
+        userKafkaService
+          .publishNotificationEmailRequested({
+            userId,
+            type: notificationType,
+            title: data.title,
+            message: data.message,
+            metadata: data.metadata,
+            requestedAt: new Date().toISOString(),
+          })
+          .catch((err) =>
+            console.error('[NotificationService] Kafka email request publish error:', err),
+          );
+      }
+      return null;
+    }
+
     const notification = await prisma.notification.create({
       data: {
         userId,
-        type: (data.type as never) ?? 'SYSTEM',
+        type: (notificationType as never) ?? 'SYSTEM',
         title: data.title,
         message: data.message,
         metadata: data.metadata ? JSON.parse(JSON.stringify(data.metadata)) : undefined,
@@ -97,6 +157,24 @@ class NotificationService {
       .catch((err) =>
         console.error('[NotificationService] Kafka publish error:', err),
       );
+
+    // Check email preference and emit email request if enabled (DR-447)
+    const shouldSendEmail = await this.shouldSend(userId, notificationType, 'email');
+    if (shouldSendEmail) {
+      userKafkaService
+        .publishNotificationEmailRequested({
+          notificationId: notification.id,
+          userId,
+          type: notificationType,
+          title: data.title,
+          message: data.message,
+          metadata: data.metadata,
+          requestedAt: new Date().toISOString(),
+        })
+        .catch((err) =>
+          console.error('[NotificationService] Kafka email request publish error:', err),
+        );
+    }
 
     return notification;
   }
