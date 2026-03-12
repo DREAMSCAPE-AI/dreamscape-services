@@ -70,8 +70,15 @@ class EmailService {
         messageId: response.headers['x-message-id'] as string,
       };
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown SendGrid error';
-      console.error('❌ SendGrid send failed:', message);
+      let message = 'Unknown SendGrid error';
+      if (error && typeof error === 'object' && 'response' in error) {
+        const sgError = error as { response: { body?: unknown; statusCode?: number } };
+        console.error('❌ SendGrid send failed:', JSON.stringify(sgError.response.body));
+        message = `SendGrid ${sgError.response.statusCode}: ${JSON.stringify(sgError.response.body)}`;
+      } else if (error instanceof Error) {
+        console.error('❌ SendGrid send failed:', error.message);
+        message = error.message;
+      }
       return { success: false, error: message };
     }
   }

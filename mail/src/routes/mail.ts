@@ -104,4 +104,57 @@ router.get('/templates', (_req: Request, res: Response): void => {
   res.status(200).json({ success: true, templates: listTemplates() });
 });
 
+/**
+ * GET /api/v1/mail/preview/:templateName
+ * Render a template in the browser with sample data — no email sent.
+ * Accepts optional query params to override dynamic data.
+ */
+router.get('/preview/:templateName', (req: Request, res: Response): void => {
+  const { templateName } = req.params;
+  const template = getTemplate(templateName);
+
+  if (!template) {
+    res.status(404).json({ success: false, error: `Template "${templateName}" not found` });
+    return;
+  }
+
+  // Build sample data from required fields + query params
+  const sampleData: Record<string, string> = {
+    year: new Date().getFullYear().toString(),
+    firstName: 'Nicolas',
+    loginUrl: 'https://dreamscape.com/login',
+    resetUrl: 'https://dreamscape.com/reset?token=sample-token',
+    expiresIn: '15 minutes',
+    bookingRef: 'DS-2026-4567',
+    destination: 'Bali',
+    departureDate: '2026-07-15',
+    returnDate: '2026-07-28',
+    bookingUrl: 'https://dreamscape.com/bookings/DS-2026-4567',
+    dashboardUrl: 'https://dreamscape.com/dashboard',
+    amount: '1 249.00',
+    currency: 'EUR',
+    paymentDate: '2026-03-12',
+    paymentMethod: 'Visa •••• 4242',
+    receiptUrl: 'https://dreamscape.com/receipts/DS-2026-4567',
+    retryUrl: 'https://dreamscape.com/payment/retry/DS-2026-4567',
+    supportUrl: 'https://dreamscape.com/support',
+    unsubscribeUrl: '#',
+    preferencesUrl: '#',
+  };
+
+  // Override with query params
+  for (const [key, value] of Object.entries(req.query)) {
+    if (typeof value === 'string') sampleData[key] = value;
+  }
+
+  const renderedSubject = renderTemplate(template.subject, sampleData);
+  const renderedHtml = renderTemplate(template.html, sampleData);
+
+  res.setHeader('Content-Type', 'text/html');
+  res.status(200).send(`
+    <!-- Subject: ${renderedSubject} -->
+    ${renderedHtml}
+  `);
+});
+
 export default router;
