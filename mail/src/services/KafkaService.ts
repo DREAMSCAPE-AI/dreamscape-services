@@ -1,0 +1,62 @@
+import { getKafkaClient, KAFKA_TOPICS, CONSUMER_GROUPS } from '@dreamscape/kafka';
+import type { KafkaMailPayload } from '../types';
+import emailService from './EmailService';
+
+class MailKafkaService {
+  private client = getKafkaClient('mail-service');
+  private running = false;
+
+  async initialize(): Promise<void> {
+    try {
+      await this.client.connect();
+      await this.subscribeToMailEvents();
+      this.running = true;
+      console.log('✅ Mail Kafka service initialized');
+    } catch (error) {
+      console.warn('⚠️  Kafka initialization failed — mail service running without event consumers');
+    }
+  }
+
+  private async subscribeToMailEvents(): Promise<void> {
+    await this.client.subscribe(CONSUMER_GROUPS.NOTIFICATION_SERVICE, [
+      {
+        topic: KAFKA_TOPICS.EMAIL_REQUESTED,
+        handler: async (event) => {
+          const payload = event.payload as KafkaMailPayload;
+          console.log(`📧 Processing email request: ${payload.subject} → ${payload.to}`);
+
+          const result = await emailService.send({
+            to: payload.to,
+            subject: payload.subject,
+            templateId: payload.templateId,
+            dynamicData: payload.dynamicData,
+            html: payload.html,
+            text: payload.text,
+          });
+
+          if (!result.success) {
+            console.error(`❌ Failed to send email: ${result.error}`);
+          }
+        },
+      },
+    ]);
+  }
+
+  async shutdown(): Promise<void> {
+    if (this.running) {
+      await this.client.disconnect();
+      this.running = false;
+      console.log('🛑 Mail Kafka service shut down');
+    }
+  }
+
+  async healthCheck(): Promise<{ healthy: boolean; details?: Record<string, unknown> }> {
+    if (!this.running) {
+      return { healthy: false, details: { message: 'Kafka not connected' } };
+    }
+    return this.client.healthCheck();
+  }
+}
+
+const mailKafkaService = new MailKafkaService();
+export default mailKafkaService;
