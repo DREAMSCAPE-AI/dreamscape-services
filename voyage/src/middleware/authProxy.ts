@@ -27,7 +27,6 @@ export const authenticateToken = async (
       return;
     }
 
-    // Verify token with auth-service
     const response = await axios.post(`${AUTH_SERVICE_URL}/v1/auth/verify-token`, {}, {
       headers: {
         'Authorization': `Bearer ${token}`

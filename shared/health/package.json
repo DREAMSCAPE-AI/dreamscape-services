@@ -1,0 +1,19 @@
+{
+  "name": "@dreamscape/health",
+  "version": "1.0.0",
+  "description": "Shared health check utilities",
+  "main": "index.ts",
+  "dependencies": {},
+  "peerDependencies": {
+    "pg": "^8.0.0",
+    "redis": "^4.0.0 || ^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "pg": {
+      "optional": true
+    },
+    "redis": {
+      "optional": true
+    }
+  }
+}
