@@ -74,10 +74,10 @@ router.put('/', authenticateToken, async (req: AuthRequest, res: Response): Prom
 
     await prisma.userSettings.upsert({
       where: { userId },
-      update: { notificationPreferences: validated as unknown as Record<string, unknown> },
+      update: { notificationPreferences: validated as any },
       create: {
         userId,
-        notificationPreferences: validated as unknown as Record<string, unknown>,
+        notificationPreferences: validated as any,
       },
     });
 

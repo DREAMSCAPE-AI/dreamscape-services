@@ -1,6 +1,8 @@
-import { Pool } from 'pg';
-import { RedisClientType } from 'redis';
 import { HealthStatus, ComponentType } from './type';
+
+// Types optionnels pour éviter les erreurs de compilation si les dépendances ne sont pas installées
+type Pool = any;
+type RedisClientType = any;
 
 /**
  * Health Check Helpers - INFRA-013.1
