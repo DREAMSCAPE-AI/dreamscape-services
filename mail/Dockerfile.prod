@@ -24,10 +24,10 @@ COPY --from=builder /app/mail/node_modules ./node_modules
 COPY --from=builder /app/mail/package.json ./package.json
 
 ENV NODE_ENV=production
-EXPOSE 3006
+EXPOSE 3007
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3006/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1));"
+  CMD node -e "require('http').get('http://localhost:3007/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1));"
 
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "dist/server.js"]
