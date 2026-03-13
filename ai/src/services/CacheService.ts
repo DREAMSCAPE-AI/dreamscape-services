@@ -169,6 +169,42 @@ export class CacheService {
       console.error('Cache clear error:', error);
     }
   }
+
+  /**
+   * Generic get with custom key
+   * @param key - Cache key
+   * @returns Cached value or null
+   */
+  async get(key: string): Promise<string | null> {
+    try {
+      return await redis.get(key);
+    } catch (error) {
+      console.error('Cache get error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Generic set with custom key and TTL
+   * @param key - Cache key
+   * @param ttl - Time to live (seconds)
+   * @param value - Value to cache
+   */
+  async setex(key: string, ttl: number, value: string): Promise<void> {
+    try {
+      await redis.setex(key, ttl, value);
+    } catch (error) {
+      console.error('Cache set error:', error);
+    }
+  }
+
+  /**
+   * Health check - ping Redis
+   * @returns 'PONG' if successful
+   */
+  async ping(): Promise<string> {
+    return await redis.ping();
+  }
 }
 
 export default new CacheService();
