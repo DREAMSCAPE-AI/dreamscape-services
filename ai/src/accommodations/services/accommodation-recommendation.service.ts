@@ -33,6 +33,9 @@ import { prisma } from '@dreamscape/db';
 import axios from 'axios';
 import { AccommodationVectorizerService } from './accommodation-vectorizer.service';
 import { AccommodationScoringService } from './accommodation-scoring.service';
+import CacheService from '../../services/CacheService';
+import { getABTestingService } from '../../services/ABTestingService';
+import aiKafkaService from '../../services/KafkaService';
 import {
   RecommendationOptions,
   RecommendationResponse,
@@ -43,7 +46,6 @@ import {
 // Configuration
 const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3001';
 const AMADEUS_SERVICE_URL = process.env.AMADEUS_SERVICE_URL || 'http://localhost:3002';
-const REDIS_CLIENT = null; // TODO: Initialize Redis client
 
 /**
  * Performance metrics tracker
@@ -65,12 +67,11 @@ interface PerformanceMetrics {
 export class AccommodationRecommendationService {
   private vectorizer: AccommodationVectorizerService;
   private scorer: AccommodationScoringService;
-  private cache: any; // Redis client
+  private cache = CacheService;
 
   constructor() {
     this.vectorizer = new AccommodationVectorizerService();
     this.scorer = new AccommodationScoringService();
-    this.cache = REDIS_CLIENT;
   }
 
   /**
@@ -153,15 +154,29 @@ export class AccommodationRecommendationService {
       }));
       metrics.vectorizationTime = Date.now() - vectorizationStart;
 
-      // Step 5: Score and rank
+      // Step 5: Determine model strategy (US-IA-014 A/B Testing)
+      const abTestService = getABTestingService();
+      const useMLModel = abTestService.shouldUseMLModel(options.userId);
+
+      // Configure scorer with ML mode if enabled
+      if (useMLModel) {
+        this.scorer.updateConfig({ useMLModel: true });
+      }
+
+      // Step 5.5: Score and rank
       const scoringStart = Date.now();
       const scoredHotels = await this.scorer.scoreAccommodations(
         userVector,
         userSegment,
         hotelsWithVectors,
-        options.limit || 20
+        options.limit || 20,
+        undefined, // userHistory - TODO: fetch from Kafka
+        options.userId // Required for ML mode
       );
       metrics.scoringTime = Date.now() - scoringStart;
+
+      // Reset scorer config to default
+      this.scorer.updateConfig({ useMLModel: false });
 
       // Step 6: Build response
       metrics.totalTime = Date.now() - startTime;
@@ -172,12 +187,28 @@ export class AccommodationRecommendationService {
         recommendations: scoredHotels,
         metadata: {
           processingTime: metrics.totalTime,
-          strategy: 'hybrid',
+          strategy: useMLModel ? 'ml_hybrid' : 'rule_based',
           cacheHit: false,
           amadeusResponseTime: metrics.amadeusSearchTime,
           scoringTime: metrics.scoringTime,
         },
       };
+
+      // Step 6.5: Publish A/B test event (US-IA-014)
+      try {
+        await aiKafkaService.publishModelInference({
+          userId: options.userId,
+          requestId: `rec-${Date.now()}`,
+          modelType: useMLModel ? 'svd_v1.0' : 'rule_based',
+          latency: metrics.scoringTime,
+          topScore: scoredHotels[0]?.score || 0,
+          fromCache: false,
+          timestamp: new Date(),
+        });
+      } catch (kafkaError) {
+        console.warn('[Kafka] Failed to publish model inference event:', kafkaError);
+        // Non-critical, continue
+      }
 
       // Step 7: Cache results
       if (this.cache) {

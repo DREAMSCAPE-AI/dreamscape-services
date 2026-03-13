@@ -173,14 +173,29 @@ jobs:
 
               console.log('✅ Central pipeline triggered successfully');
 
+              // Trigger test suite in dreamscape-tests
+              await github.rest.repos.createDispatchEvent({
+                owner: 'DREAMSCAPE-AI',
+                repo: 'dreamscape-tests',
+                event_type: 'test-request',
+                client_payload: {
+                  repository: context.repo.repo,
+                  branch: context.ref.replace('refs/heads/', ''),
+                  sha: context.sha,
+                  component: '${{ needs.local-ci.outputs.changed_services }}'
+                }
+              });
+
+              console.log('✅ Test suite triggered in dreamscape-tests');
+
               // Set pending status
               await github.rest.repos.createCommitStatus({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 sha: context.sha,
                 state: 'pending',
-                target_url: 'https://github.com/DREAMSCAPE-AI/dreamscape-infra/actions',
-                description: 'Central CI/CD pipeline triggered',
+                target_url: 'https://github.com/DREAMSCAPE-AI/dreamscape-tests/actions',
+                description: 'Test suite triggered in dreamscape-tests',
                 context: 'ci/unified-pipeline'
               });
 
