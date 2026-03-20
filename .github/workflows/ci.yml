@@ -83,6 +83,7 @@ jobs:
     needs: [detect-changes]
     if: needs.detect-changes.outputs.has_changes == 'true'
     strategy:
+      fail-fast: false
       matrix:
         service: ${{ fromJson(needs.detect-changes.outputs.services) }}
     steps:
@@ -94,11 +95,31 @@ jobs:
         with:
           node-version: 20
 
+      - name: Build shared packages
+        run: |
+          # Build @dreamscape/db (prisma generate + tsc)
+          if [ -d "db" ] && [ -f "db/package.json" ]; then
+            echo "📦 Building @dreamscape/db..."
+            cd db
+            if [ -f "package-lock.json" ]; then npm ci; else npm install; fi
+            npx prisma generate
+            npm run build --if-present
+            cd ..
+          fi
+
+          # Build @dreamscape/kafka
+          if [ -d "shared/kafka" ] && [ -f "shared/kafka/package.json" ]; then
+            echo "📦 Building @dreamscape/kafka..."
+            cd shared/kafka
+            if [ -f "package-lock.json" ]; then npm ci; else npm install; fi
+            npm run build --if-present
+            cd ../..
+          fi
+
       - name: Install dependencies for ${{ matrix.service }}
         run: |
           if [ -f "${{ matrix.service }}/package.json" ]; then
             cd ${{ matrix.service }}
-            # Use npm ci if package-lock.json exists, otherwise npm install
             if [ -f "package-lock.json" ]; then
               echo "📦 Found package-lock.json - using npm ci"
               npm ci
