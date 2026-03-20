@@ -228,6 +228,45 @@ class AIKafkaService {
   }
 
   /**
+   * Publish model inference event (US-IA-014 A/B Testing)
+   *
+   * Tracks which model was used (ML vs rule-based) for analytics.
+   *
+   * @param payload - Model inference details
+   * @param correlationId - Optional correlation ID
+   */
+  async publishModelInference(
+    payload: {
+      userId: string;
+      requestId: string;
+      modelType: 'svd_v1.0' | 'rule_based';
+      latency: number;
+      topScore: number;
+      fromCache: boolean;
+      timestamp: Date;
+    },
+    correlationId?: string
+  ): Promise<void> {
+    if (!this.client) {
+      console.warn('[AIKafkaService] Client not initialized, skipping publish');
+      return;
+    }
+
+    const event = createEvent(
+      'ai.model.inference_completed',
+      SERVICE_NAME,
+      payload,
+      { correlationId }
+    );
+
+    // Publish to AI_PREDICTION_MADE topic (or create new topic if needed)
+    await this.client.publish(KAFKA_TOPICS.AI_PREDICTION_MADE, event, payload.requestId);
+    console.log(
+      `[AIKafkaService] Published model inference event: ${payload.modelType} for ${payload.userId} (${payload.latency}ms)`
+    );
+  }
+
+  /**
    * Health check for Kafka connection
    */
   async healthCheck(): Promise<{ healthy: boolean; details: Record<string, unknown> }> {

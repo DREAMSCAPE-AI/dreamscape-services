@@ -1,0 +1,164 @@
+/**
+ * US-IA-012 - gRPC Recommendation Service Protocol
+ *
+ * Defines the contract between TypeScript API and Python ML service
+ * for serving SVD collaborative filtering predictions.
+ *
+ * Service: dreamscape-ml-service
+ * Port: 50051
+ */
+
+syntax = "proto3";
+
+package dreamscape.ml;
+
+/**
+ * Main recommendation service
+ */
+service RecommendationService {
+  /**
+   * Get personalized recommendations for a user
+   *
+   * Returns top-K item predictions with scores, optionally excluding
+   * already-seen items and supporting different model versions.
+   */
+  rpc GetRecommendations(RecommendationRequest) returns (RecommendationResponse);
+
+  /**
+   * Health check for service monitoring
+   */
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+
+  /**
+   * Get current model metadata
+   */
+  rpc GetModelInfo(ModelInfoRequest) returns (ModelInfoResponse);
+}
+
+/**
+ * Request for personalized recommendations
+ */
+message RecommendationRequest {
+  // User ID (must exist in trained model)
+  string user_id = 1;
+
+  // Items to exclude from results (e.g., already viewed/booked)
+  repeated string exclude_seen = 2;
+
+  // Number of top recommendations to return
+  int32 top_k = 3;
+
+  // Model version to use (default: "v1.0")
+  // Format: "v{major}.{minor}" (e.g., "v1.0", "v1.1", "v2.0")
+  string model_version = 4;
+
+  // Request timeout in milliseconds (optional, default: 300ms)
+  int32 timeout_ms = 5;
+}
+
+/**
+ * Response with scored recommendations
+ */
+message RecommendationResponse {
+  // Scored item predictions
+  repeated ScoredItem items = 1;
+
+  // Model version used for predictions
+  string model_version = 2;
+
+  // Inference time (model prediction only, excluding cache)
+  int32 inference_time_ms = 3;
+
+  // Whether result came from cache
+  bool from_cache = 4;
+
+  // Total items considered (before filtering)
+  int32 total_candidates = 5;
+
+  // Warning/info messages (e.g., "cold start user")
+  repeated string warnings = 6;
+}
+
+/**
+ * Scored item (hotel ID + ML score)
+ */
+message ScoredItem {
+  // Item ID (hotel_id from training data)
+  string item_id = 1;
+
+  // ML prediction score [0-1]
+  // Higher = more relevant for this user
+  float score = 2;
+
+  // Optional: Confidence in this prediction [0-1]
+  float confidence = 3;
+}
+
+/**
+ * Health check request
+ */
+message HealthCheckRequest {
+  // Service name (optional)
+  string service = 1;
+}
+
+/**
+ * Health check response
+ */
+message HealthCheckResponse {
+  // Service status
+  enum Status {
+    UNKNOWN = 0;
+    SERVING = 1;      // Healthy, ready to serve
+    NOT_SERVING = 2;  // Unhealthy
+    SERVICE_UNKNOWN = 3;
+  }
+
+  Status status = 1;
+
+  // Model loaded and ready
+  bool model_ready = 2;
+
+  // Cache connected
+  bool cache_connected = 3;
+
+  // Uptime in seconds
+  int64 uptime_seconds = 4;
+
+  // Additional metadata
+  map<string, string> metadata = 5;
+}
+
+/**
+ * Model info request
+ */
+message ModelInfoRequest {
+  // Model version (optional, default: current active)
+  string model_version = 1;
+}
+
+/**
+ * Model info response
+ */
+message ModelInfoResponse {
+  // Model version
+  string model_version = 1;
+
+  // Training timestamp (ISO 8601)
+  string trained_at = 2;
+
+  // Number of users in model
+  int32 num_users = 3;
+
+  // Number of items in model
+  int32 num_items = 4;
+
+  // Model type (e.g., "SVD", "ALS")
+  string model_type = 5;
+
+  // Hyperparameters used
+  map<string, string> hyperparameters = 6;
+
+  // Offline metrics (if available)
+  map<string, float> metrics = 7;
+}

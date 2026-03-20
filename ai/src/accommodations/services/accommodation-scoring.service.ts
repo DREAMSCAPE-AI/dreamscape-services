@@ -33,6 +33,12 @@ import {
   AccommodationCategory,
   SEGMENT_CATEGORY_BOOST,
 } from '../types/accommodation-vector.types';
+import {
+  DiversityConfig,
+  DEFAULT_DIVERSITY_CONFIG,
+  DiversityMetrics,
+} from '../types/diversity-config.types';
+import { MLGrpcClient, getMLClient } from '../../services/MLGrpcClient';
 
 /**
  * Scoring configuration
@@ -67,6 +73,13 @@ export interface ScoringConfig {
   diversityLambda: number;    // default: 0.7 (70% relevance, 30% diversity)
   applyDiversification: boolean; // default: true
 
+  // Destination-level diversity (US-IA-011)
+  diversityConfig: DiversityConfig;
+
+  // ML integration (US-IA-013)
+  useMLModel: boolean;            // default: false (rule-based only)
+  mlHybridWeight: number;         // default: 0.7 (70% ML, 30% rules)
+
   // Filters
   minSimilarityThreshold: number; // default: 0.3
   minQualityScore: number;        // default: 0.4
@@ -95,6 +108,9 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfig = {
   applySegmentBoost: true,
   diversityLambda: 0.7,
   applyDiversification: true,
+  diversityConfig: DEFAULT_DIVERSITY_CONFIG,
+  useMLModel: false, // Default: rule-based only (enable via A/B test)
+  mlHybridWeight: 0.7, // 70% ML + 30% rules when useMLModel=true
   minSimilarityThreshold: 0.3,
   minQualityScore: 0.4,
 };
@@ -145,9 +161,28 @@ export class AccommodationScoringService {
     userVector: number[],
     userSegment: string,
     hotels: Array<{ features: AccommodationFeatures; vector: AccommodationVector }>,
-    limit: number = 20
+    limit: number = 20,
+    userHistory?: { viewedCountries: Set<string>; viewedCities: Set<string> },
+    userId?: string // Required for ML mode
   ): Promise<ScoredAccommodation[]> {
-    // Step 1: Calculate scores for all hotels
+    // US-IA-013: ML-based scoring (if enabled)
+    if (this.config.useMLModel && userId) {
+      try {
+        return await this.scoreWithMLHybrid(
+          userId,
+          userVector,
+          userSegment,
+          hotels,
+          limit,
+          userHistory
+        );
+      } catch (error) {
+        console.warn('[Scoring] ML scoring failed, falling back to rule-based:', error);
+        // Fallback to rule-based scoring below
+      }
+    }
+
+    // Step 1: Calculate scores for all hotels (rule-based)
     const scoredHotels: HotelWithVector[] = [];
 
     for (const { features, vector } of hotels) {
@@ -177,7 +212,15 @@ export class AccommodationScoringService {
           ? this.getSegmentBoost(userSegment, features.category)
           : 1.0;
 
-        const finalScore = Math.min(1.0, baseScore * segmentBoost);
+        const baseScoreWithSegment = baseScore * segmentBoost;
+
+        // Apply novelty bonus (US-IA-011 - Encourages exploration)
+        const noveltyWeight = this.config.diversityConfig.noveltyWeight;
+        const noveltyBonus = this.calculateNoveltyScore(features, userHistory);
+        const finalScore = Math.min(
+          1.0,
+          baseScoreWithSegment * (1 - noveltyWeight) + noveltyBonus * noveltyWeight
+        );
 
         scoredHotels.push({
           hotel: features,
@@ -201,12 +244,34 @@ export class AccommodationScoringService {
     scoredHotels.sort((a, b) => b.score - a.score);
 
     // Step 3: Apply diversification (MMR)
-    const finalHotels = this.config.applyDiversification
+    let diversifiedHotels = this.config.applyDiversification
       ? this.applyMMR(scoredHotels, userVector, limit)
       : scoredHotels.slice(0, limit);
 
+    // Step 3.5: Enforce destination diversity constraints (US-IA-011)
+    let diversityMetrics: DiversityMetrics | undefined;
+    if (this.config.diversityConfig.enableDestinationPenalty) {
+      const { results, metrics } = this.enforceDestinationDiversity(diversifiedHotels);
+      diversifiedHotels = results;
+      diversityMetrics = metrics;
+
+      // Log diversity metrics
+      console.log('[Diversity]', {
+        uniqueCountries: metrics.uniqueCountries,
+        uniqueCities: metrics.uniqueCities,
+        maxCountOccurrences: metrics.maxCountOccurrences,
+        diversityScore: metrics.diversityScore.toFixed(3),
+        violations: metrics.constraintViolations,
+      });
+
+      // Warn if constraints violated
+      if (metrics.constraintViolations.length > 0) {
+        console.warn('[Diversity] Constraints violated:', metrics.constraintViolations);
+      }
+    }
+
     // Step 4: Convert to ScoredAccommodation with reasons
-    const results: ScoredAccommodation[] = finalHotels.map((hotel, index) => ({
+    const results: ScoredAccommodation[] = diversifiedHotels.map((hotel, index) => ({
       accommodation: hotel.hotel,
       vector: hotel.vector,
       score: hotel.score,
@@ -215,6 +280,140 @@ export class AccommodationScoringService {
       reasons: this.generateReasons(hotel, userVector, userSegment),
       rank: index + 1,
     }));
+
+    return results;
+  }
+
+  /**
+   * Score accommodations with ML + rule-based hybrid (US-IA-013)
+   *
+   * Algorithm:
+   * 1. Get ML predictions from gRPC service
+   * 2. Calculate rule-based scores for same hotels
+   * 3. Hybrid score = mlWeight × ML_score + (1 - mlWeight) × rule_score
+   * 4. Apply diversity constraints
+   * 5. Return ranked results
+   *
+   * @param userId - User ID for ML predictions
+   * @param userVector - User preference vector (for rule-based fallback)
+   * @param userSegment - User segment
+   * @param hotels - Candidate hotels
+   * @param limit - Top-K results
+   * @param userHistory - User history for novelty scoring
+   * @returns Hybrid scored recommendations
+   */
+  private async scoreWithMLHybrid(
+    userId: string,
+    userVector: number[],
+    userSegment: string,
+    hotels: Array<{ features: AccommodationFeatures; vector: AccommodationVector }>,
+    limit: number,
+    userHistory?: { viewedCountries: Set<string>; viewedCities: Set<string> }
+  ): Promise<ScoredAccommodation[]> {
+    console.log('[Scoring] Using ML hybrid mode');
+
+    // Step 1: Get ML predictions
+    const mlClient = getMLClient();
+    const mlStartTime = Date.now();
+
+    const mlResponse = await mlClient.getRecommendations({
+      userId,
+      excludeSeen: [], // TODO: Pass actual viewed/booked items
+      topK: limit * 2, // Get more candidates for diversity filtering
+      timeout: 300, // 300ms timeout
+    });
+
+    const mlLatency = Date.now() - mlStartTime;
+    console.log(`[ML] Got ${mlResponse.items.length} predictions in ${mlLatency}ms (cache: ${mlResponse.fromCache})`);
+
+    // Step 2: Build ML score map (item_id -> ML score)
+    const mlScores = new Map<string, number>();
+    mlResponse.items.forEach((item) => {
+      mlScores.set(item.itemId, item.score);
+    });
+
+    // Step 3: Calculate rule-based scores for all hotels
+    const scoredHotels: HotelWithVector[] = [];
+
+    for (const { features, vector } of hotels) {
+      // Rule-based score (simplified - only similarity + popularity)
+      const similarity = this.calculateCosineSimilarity(userVector, vector);
+      const popularity = this.calculatePopularityScore(features);
+      const quality = this.calculateQualityScore(features);
+
+      const ruleScore =
+        this.config.weights.similarity * similarity +
+        this.config.weights.popularity * popularity +
+        this.config.weights.quality * quality;
+
+      // Get ML score (if available)
+      const mlScore = mlScores.get(features.hotelId) || 0;
+
+      // Hybrid score: 70% ML + 30% rules (configurable)
+      const mlWeight = this.config.mlHybridWeight;
+      const hybridScore = mlWeight * mlScore + (1 - mlWeight) * ruleScore;
+
+      // Apply segment boost
+      const segmentBoost = this.config.applySegmentBoost
+        ? this.getSegmentBoost(userSegment, features.category)
+        : 1.0;
+
+      const baseScoreWithSegment = hybridScore * segmentBoost;
+
+      // Apply novelty bonus
+      const noveltyWeight = this.config.diversityConfig.noveltyWeight;
+      const noveltyBonus = this.calculateNoveltyScore(features, userHistory);
+      const finalScore = Math.min(
+        1.0,
+        baseScoreWithSegment * (1 - noveltyWeight) + noveltyBonus * noveltyWeight
+      );
+
+      scoredHotels.push({
+        hotel: features,
+        vector,
+        score: finalScore,
+        breakdown: {
+          similarityScore: similarity,
+          popularityScore: popularity,
+          qualityScore: quality,
+          segmentBoost,
+          finalScore,
+          mlScore, // Additional field for ML score
+        },
+      });
+    }
+
+    // Step 4: Sort by hybrid score
+    scoredHotels.sort((a, b) => b.score - a.score);
+
+    // Step 5: Apply diversification (MMR)
+    let diversifiedHotels = this.config.applyDiversification
+      ? this.applyMMR(scoredHotels, userVector, limit)
+      : scoredHotels.slice(0, limit);
+
+    // Step 6: Enforce destination diversity
+    if (this.config.diversityConfig.enableDestinationPenalty) {
+      const { results, metrics } = this.enforceDestinationDiversity(diversifiedHotels);
+      diversifiedHotels = results;
+
+      console.log('[Diversity]', {
+        uniqueCountries: metrics.uniqueCountries,
+        diversityScore: metrics.diversityScore.toFixed(3),
+      });
+    }
+
+    // Step 7: Convert to ScoredAccommodation
+    const results: ScoredAccommodation[] = diversifiedHotels.map((hotel, index) => ({
+      accommodation: hotel.hotel,
+      vector: hotel.vector,
+      score: hotel.score,
+      confidence: this.calculateConfidence(hotel.breakdown),
+      breakdown: hotel.breakdown,
+      reasons: this.generateReasons(hotel, userVector, userSegment),
+      rank: index + 1,
+    }));
+
+    console.log('[ML Hybrid] Returned ${results.length} recommendations');
 
     return results;
   }
@@ -360,9 +559,10 @@ export class AccommodationScoringService {
   // ==========================================================================
 
   /**
-   * Apply Maximum Marginal Relevance for diversification
+   * Apply Maximum Marginal Relevance for diversification (Enhanced - US-IA-011)
    *
    * Greedy algorithm that selects hotels balancing relevance and diversity.
+   * Enhanced version includes destination-level diversity penalty.
    *
    * @param hotels - Sorted hotels by score
    * @param userVector - User preference vector
@@ -375,8 +575,15 @@ export class AccommodationScoringService {
     limit: number
   ): HotelWithVector[] {
     const lambda = this.config.diversityLambda;
+    const diversityConfig = this.config.diversityConfig;
     const selected: HotelWithVector[] = [];
     const remaining = [...hotels];
+
+    // Track selected countries and cities for destination-level diversity
+    const selectedCountries = new Set<string>();
+    const selectedCities = new Set<string>();
+    const countryCount = new Map<string, number>();
+    const cityCount = new Map<string, number>();
 
     while (selected.length < limit && remaining.length > 0) {
       let bestIndex = -1;
@@ -388,20 +595,55 @@ export class AccommodationScoringService {
         // Relevance component
         const relevance = candidate.score;
 
-        // Diversity component (max similarity to already selected)
-        let maxSimilarity = 0;
+        // === DIVERSITY COMPONENTS ===
+
+        // 1. Vector diversity (original MMR)
+        let maxVectorSimilarity = 0;
         if (selected.length > 0) {
           for (const selectedHotel of selected) {
             const sim = this.calculateCosineSimilarity(
               candidate.vector,
               selectedHotel.vector
             );
-            maxSimilarity = Math.max(maxSimilarity, sim);
+            maxVectorSimilarity = Math.max(maxVectorSimilarity, sim);
           }
         }
 
-        // MMR score
-        const mmrScore = lambda * relevance - (1 - lambda) * maxSimilarity;
+        // 2. Destination-level diversity penalty (US-IA-011)
+        let destinationPenalty = 0;
+
+        if (diversityConfig.enableDestinationPenalty) {
+          const candidateCountry = candidate.hotel.location?.country || '';
+          const candidateCity = candidate.hotel.location?.city || '';
+
+          // Pénalité si pays déjà sélectionné
+          if (selectedCountries.has(candidateCountry)) {
+            destinationPenalty = Math.max(
+              destinationPenalty,
+              diversityConfig.countryPenaltyValue
+            );
+          }
+
+          // Pénalité si ville déjà sélectionnée (moins forte)
+          if (selectedCities.has(candidateCity)) {
+            destinationPenalty = Math.max(
+              destinationPenalty,
+              diversityConfig.countryPenaltyValue * 0.7  // 70% de la pénalité pays
+            );
+          }
+
+          // Pénalité si quota pays dépassé (hard constraint preview)
+          const currentCountryCount = countryCount.get(candidateCountry) || 0;
+          if (currentCountryCount >= diversityConfig.maxSameCountry) {
+            destinationPenalty = 1.0;  // Maximum penalty
+          }
+        }
+
+        // Combined diversity penalty (max des deux)
+        const diversityPenalty = Math.max(maxVectorSimilarity, destinationPenalty);
+
+        // Enhanced MMR score
+        const mmrScore = lambda * relevance - (1 - lambda) * diversityPenalty;
 
         if (mmrScore > bestMMRScore) {
           bestMMRScore = mmrScore;
@@ -410,7 +652,23 @@ export class AccommodationScoringService {
       }
 
       if (bestIndex >= 0) {
-        selected.push(remaining[bestIndex]);
+        const selectedHotel = remaining[bestIndex];
+        selected.push(selectedHotel);
+
+        // Update tracking sets
+        const country = selectedHotel.hotel.location?.country || '';
+        const city = selectedHotel.hotel.location?.city || '';
+
+        if (country) {
+          selectedCountries.add(country);
+          countryCount.set(country, (countryCount.get(country) || 0) + 1);
+        }
+
+        if (city) {
+          selectedCities.add(city);
+          cityCount.set(city, (cityCount.get(city) || 0) + 1);
+        }
+
         remaining.splice(bestIndex, 1);
       } else {
         break;
@@ -418,6 +676,104 @@ export class AccommodationScoringService {
     }
 
     return selected;
+  }
+
+  /**
+   * Calculate novelty bonus for unexplored destinations
+   *
+   * Encourages exploration of new countries/cities based on user history.
+   * TODO US-IA-011.3: Connect to real Kafka user history events
+   *
+   * @param hotel - Hotel to score
+   * @param userHistory - User's viewed/booked destinations (optional)
+   * @returns Novelty score [0-1]
+   */
+  private calculateNoveltyScore(
+    hotel: AccommodationFeatures,
+    userHistory?: { viewedCountries: Set<string>; viewedCities: Set<string> }
+  ): number {
+    // If no history available, assume everything is novel (neutral)
+    if (!userHistory) {
+      return 0.5;
+    }
+
+    const country = hotel.location?.country || '';
+    const city = hotel.location?.city || '';
+
+    // Fully novel destination (never seen this country)
+    if (country && !userHistory.viewedCountries.has(country)) {
+      return 1.0;
+    }
+
+    // Novel city in known country
+    if (city && !userHistory.viewedCities.has(city)) {
+      return 0.5;
+    }
+
+    // Already explored
+    return 0.0;
+  }
+
+  /**
+   * Enforce destination diversity constraints (post-processing after MMR)
+   *
+   * Hard constraints:
+   * - Maximum N hotels per country (default: 4)
+   * - Minimum K distinct countries (default: 5)
+   *
+   * @param hotels - Hotels after MMR
+   * @returns Filtered hotels respecting diversity constraints + metrics
+   */
+  private enforceDestinationDiversity(
+    hotels: HotelWithVector[]
+  ): { results: HotelWithVector[]; metrics: DiversityMetrics } {
+    const diversityConfig = this.config.diversityConfig;
+    const countryCount = new Map<string, number>();
+    const cityCount = new Map<string, number>();
+    const filtered: HotelWithVector[] = [];
+    const constraintViolations: string[] = [];
+
+    // Pass 1: Filter by maxSameCountry constraint
+    for (const hotel of hotels) {
+      const country = hotel.hotel.location?.country || 'Unknown';
+      const city = hotel.hotel.location?.city || 'Unknown';
+      const currentCount = countryCount.get(country) || 0;
+
+      if (currentCount < diversityConfig.maxSameCountry) {
+        filtered.push(hotel);
+        countryCount.set(country, currentCount + 1);
+
+        const cityKey = `${country}:${city}`;
+        cityCount.set(cityKey, (cityCount.get(cityKey) || 0) + 1);
+      } else {
+        // Constraint violated, skip this hotel
+        constraintViolations.push(
+          `Skipped hotel in ${country} (quota ${diversityConfig.maxSameCountry} reached)`
+        );
+      }
+    }
+
+    // Pass 2: Check minCountries constraint
+    const uniqueCountries = countryCount.size;
+    if (uniqueCountries < diversityConfig.minCountries && filtered.length < hotels.length) {
+      constraintViolations.push(
+        `Only ${uniqueCountries} countries (minimum: ${diversityConfig.minCountries})`
+      );
+    }
+
+    // Calculate diversity metrics
+    const maxCountOccurrences = Math.max(...Array.from(countryCount.values()));
+    const diversityScore = uniqueCountries / filtered.length; // 0-1, higher = more diverse
+
+    const metrics: DiversityMetrics = {
+      uniqueCountries,
+      uniqueCities: cityCount.size,
+      maxCountOccurrences,
+      diversityScore: Math.min(1, diversityScore),
+      constraintViolations,
+    };
+
+    return { results: filtered, metrics };
   }
 
   // ==========================================================================
