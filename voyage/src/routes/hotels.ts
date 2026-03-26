@@ -126,19 +126,17 @@ router.get('/search', hotelSearchCache, async (req: Request, res: Response): Pro
       // Publish search performed event - DR-402 / DR-404
       voyageKafkaService.publishSearchPerformed({
         searchId: `search-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-        userId: (req as any).user?.id || 'anonymous',
+        sessionId: (req as any).user?.id || 'anonymous',
         searchType: 'hotel',
-        origin: cityCodeStr || `${latitudeNum},${longitudeNum}`,
-        destination: cityCodeStr || `${latitudeNum},${longitudeNum}`,
-        departureDate: checkInDate as string,
-        returnDate: checkOutDate as string,
-        passengers: {
-          adults: parseInt(adults as string),
-          children: 0,
-          infants: 0
+        criteria: {
+          origin: cityCodeStr || `${latitudeNum},${longitudeNum}`,
+          destination: cityCodeStr || `${latitudeNum},${longitudeNum}`,
+          departureDate: checkInDate as string,
+          returnDate: checkOutDate as string,
+          rooms: 1,
         },
         resultsCount: simplifiedHotels.length,
-        timestamp: new Date()
+        searchedAt: new Date().toISOString(),
       }).catch(err => console.error('[HotelSearch] Failed to publish Kafka event:', err));
 
       res.json({

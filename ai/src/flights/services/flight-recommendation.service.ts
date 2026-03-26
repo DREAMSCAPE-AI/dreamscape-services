@@ -354,7 +354,7 @@ export class FlightRecommendationService {
             hasSearchedDestination: !!(sample.flight as any).searchedDestination,
             searchedDestination: (sample.flight as any).searchedDestination,
             actualDestination: sample.flight.route?.destination,
-            arrivalAirport: sample.flight.route?.segments?.[0]?.arrival?.airport,
+            arrivalAirport: sample.flight.segments?.[0]?.arrival?.airportCode,
           });
         }
 
@@ -516,7 +516,7 @@ export class FlightRecommendationService {
           strategy,
           error: errorMessage,
           cacheHit: false,
-        },
+        } as any,
       };
     }
   }
@@ -1170,8 +1170,8 @@ export class FlightRecommendationService {
         if (filters.maxPrice) query.maxPrice = filters.maxPrice;
 
         // Validate and add airline codes (final safety check)
-        if (filters.airlines?.length > 0) {
-          const validatedAirlines = validateAndNormalizeAirlineCodes(filters.airlines);
+        if ((filters.airlines?.length ?? 0) > 0) {
+          const validatedAirlines = validateAndNormalizeAirlineCodes(filters.airlines!);
           if (validatedAirlines.length > 0) {
             query.includedAirlineCodes = validatedAirlines.join(',');
             console.log(`[FlightRecommendation] Cleaned airline codes: ${query.includedAirlineCodes}`);

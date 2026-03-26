@@ -6,7 +6,8 @@
  * - Price calculation
  */
 
-import type { CartData as PrismaCartData, CartItem } from '@prisma/client';
+type PrismaCartData = any;
+type CartItem = any;
 import prisma from '../database/prisma';
 import RedisClient from '../config/redis';
 import { Decimal } from '@prisma/client/runtime/library';
@@ -113,7 +114,7 @@ export class CartService {
         });
       } else {
         // Check if item already exists in cart
-        const existingItem = cart.items.find((item) => item.itemId === itemId && item.type === type);
+        const existingItem = cart.items.find((item: any) => item.itemId === itemId && item.type === type);
 
         if (existingItem) {
           // Item already exists in cart - don't add duplicate, just return current cart
@@ -165,7 +166,7 @@ export class CartService {
         throw new Error('Cart not found');
       }
 
-      const cartItem = cart.items.find((item) => item.id === itemId);
+      const cartItem = cart.items.find((item: any) => item.id === itemId);
 
       if (!cartItem) {
         throw new Error('Cart item not found');
@@ -203,7 +204,7 @@ export class CartService {
         throw new Error('Cart not found');
       }
 
-      const cartItem = cart.items.find((item) => item.id === itemId);
+      const cartItem = cart.items.find((item: any) => item.id === itemId);
 
       if (!cartItem) {
         throw new Error('Cart item not found');

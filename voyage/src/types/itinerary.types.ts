@@ -57,7 +57,7 @@ export const CreateItineraryItemSchema = z.object({
 export const UpdateItineraryItemSchema = z.object({
   type: z.enum(['FLIGHT', 'HOTEL', 'ACTIVITY']).optional(),
   itemId: z.string().optional().nullable(),
-  itemData: z.record(z.any()).optional(),
+  itemData: z.record(z.string(), z.any()).optional(),
   price: z.number().positive().optional(),
   currency: z.string().optional(),
   quantity: z.number().int().positive().optional(),

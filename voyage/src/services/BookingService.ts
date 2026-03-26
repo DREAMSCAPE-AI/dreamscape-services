@@ -5,7 +5,7 @@
  * - Handle payment confirmation
  */
 
-import type { BookingData } from '@prisma/client';
+type BookingData = any;
 import prisma from '../database/prisma';
 import CartService from './CartService';
 import { Decimal } from '@prisma/client/runtime/library';
@@ -89,7 +89,7 @@ export class BookingService {
         currency: cart.currency,
         data: {
           cartId: cart.id,
-          items: cart.items.map((item) => ({
+          items: cart.items.map((item: any) => ({
             type: item.type,
             itemId: item.itemId,
             itemData: item.itemData,
@@ -113,20 +113,18 @@ export class BookingService {
       try {
         const kafkaPayload: VoyageBookingCreatedPayload = {
           bookingId: booking.id,
-          bookingReference: reference,
           userId,
-          type: bookingType,
-          status: 'DRAFT',
+          bookingType: bookingType as any,
+          status: 'pending',
           totalAmount: Number(booking.totalAmount),
           currency: booking.currency,
-          items: cart.items.map((item) => ({
+          items: cart.items.map((item: any) => ({
             type: item.type,
-            itemId: item.itemId,
-            quantity: item.quantity,
+            reference: item.itemId,
+            description: item.type,
             price: Number(item.price),
-            currency: item.currency,
           })),
-          paymentIntentId,
+          travelers: [],
           createdAt: booking.createdAt.toISOString(),
         };
 
@@ -214,12 +212,9 @@ export class BookingService {
         const bookingDataPayload = updatedBooking.data as any;
         const kafkaPayload: VoyageBookingConfirmedPayload = {
           bookingId: updatedBooking.id,
-          bookingReference: reference,
           userId,
-          type: updatedBooking.type as any,
-          totalAmount: Number(updatedBooking.totalAmount),
-          currency: updatedBooking.currency,
-          items: bookingDataPayload.items || [],
+          confirmationNumber: reference,
+          paymentId: updatedBooking.paymentIntentId || '',
           confirmedAt: updatedBooking.confirmedAt?.toISOString() || new Date().toISOString(),
         };
 

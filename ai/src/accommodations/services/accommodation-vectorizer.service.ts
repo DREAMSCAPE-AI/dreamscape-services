@@ -55,7 +55,7 @@ const CITY_TO_COUNTRY_MAP: Record<string, string> = {
   SYD: 'AU', MEL: 'AU', AKL: 'NZ', DXB: 'AE', DOH: 'QA', JNB: 'ZA', CPT: 'ZA', CAI: 'EG',
   MEX: 'MX', RIO: 'BR', SAO: 'BR', BUE: 'AR', BOG: 'CO', LIM: 'PE', SAN: 'CL',
   DEL: 'IN', BOM: 'IN', BLR: 'IN', KTM: 'NP', COL: 'LK', MLE: 'MV',
-  MRA: 'MA', CAS: 'MA', CAI: 'EG', NBO: 'KE', ADD: 'ET',
+  MRA: 'MA', CAS: 'MA', NBO: 'KE', ADD: 'ET',
 };
 
 /**

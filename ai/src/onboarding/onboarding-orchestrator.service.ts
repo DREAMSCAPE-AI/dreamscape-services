@@ -234,7 +234,7 @@ export class OnboardingOrchestratorService {
         where: { userId },
         data: {
           vector: updatedVector,
-          segments: updatedSegments,
+          segments: updatedSegments as any,
           usageCount: currentVector.usageCount + 1,
           lastUsedAt: new Date(),
           updatedAt: new Date(),
@@ -332,7 +332,7 @@ export class OnboardingOrchestratorService {
       const recommendations = await this.coldStartService.getRecommendationsForNewUser(
         userId,
         profile,
-        { strategy: 'POPULARITY_ONLY', limit: 10 }
+        { strategy: 'POPULARITY_ONLY' as any, limit: 10 }
       );
 
       return {

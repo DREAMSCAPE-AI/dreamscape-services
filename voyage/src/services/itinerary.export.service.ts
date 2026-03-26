@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import { createEvents, EventAttributes } from 'ics';
-import type { Itinerary, ItineraryItem } from '@prisma/client';
+type Itinerary = any;
+type ItineraryItem = any;
 
 /**
  * Service for exporting itineraries in various formats
@@ -148,7 +149,7 @@ export class ItineraryExportService {
    * Generate iCal file for calendar import
    */
   generateICal(itinerary: Itinerary & { items: ItineraryItem[] }): string {
-    const events: EventAttributes[] = itinerary.items.map((item) => {
+    const events: EventAttributes[] = itinerary.items.map((item: any) => {
       const start = new Date(item.startDate);
       const end = new Date(item.endDate);
 

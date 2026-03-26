@@ -410,7 +410,7 @@ export class FlightVectorizerService {
       currency: simplifiedFlight.price?.currency || 'EUR',
       perPerson: true,
       taxesIncluded: true,
-      fareType: 'PUBLISHED',
+      fareType: 'PUBLISHED' as 'PUBLISHED' | 'NEGOTIATED' | 'CORPORATE',
     };
 
     // Parse amenities
