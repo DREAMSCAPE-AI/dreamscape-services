@@ -142,13 +142,13 @@ export async function getRevenueChart(period: Period) {
 
   const result = await prisma.$queryRaw<Array<{ date: Date; revenue: number }>>`
     SELECT
-      date_trunc('day', "created_at") as date,
+      date_trunc('day', "createdAt") as date,
       COALESCE(SUM(amount), 0)::float as revenue
     FROM payment_transactions
     WHERE status = 'SUCCEEDED'
-      AND "created_at" >= ${startDate}
-      AND "created_at" <= ${endDate}
-    GROUP BY date_trunc('day', "created_at")
+      AND "createdAt" >= ${startDate}
+      AND "createdAt" <= ${endDate}
+    GROUP BY date_trunc('day', "createdAt")
     ORDER BY date
   `;
 
