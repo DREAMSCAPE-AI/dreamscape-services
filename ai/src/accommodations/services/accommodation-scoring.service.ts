@@ -39,6 +39,12 @@ import {
   DiversityMetrics,
 } from '../types/diversity-config.types';
 import { MLGrpcClient, getMLClient } from '../../services/MLGrpcClient';
+import {
+  DiversityConfig,
+  DEFAULT_DIVERSITY_CONFIG,
+  DiversityMetrics,
+} from '../types/diversity-config.types';
+import { MLGrpcClient, getMLClient } from '../../services/MLGrpcClient';
 
 /**
  * Scoring configuration
@@ -72,6 +78,13 @@ export interface ScoringConfig {
   // MMR diversity
   diversityLambda: number;    // default: 0.7 (70% relevance, 30% diversity)
   applyDiversification: boolean; // default: true
+
+  // Destination-level diversity (US-IA-011)
+  diversityConfig: DiversityConfig;
+
+  // ML integration (US-IA-013)
+  useMLModel: boolean;            // default: false (rule-based only)
+  mlHybridWeight: number;         // default: 0.7 (70% ML, 30% rules)
 
   // Destination-level diversity (US-IA-011)
   diversityConfig: DiversityConfig;
@@ -162,6 +175,9 @@ export class AccommodationScoringService {
     userVector: number[],
     userSegment: string,
     hotels: Array<{ features: AccommodationFeatures; vector: AccommodationVector }>,
+    limit: number = 20,
+    userHistory?: { viewedCountries: Set<string>; viewedCities: Set<string> },
+    userId?: string // Required for ML mode
     limit: number = 20,
     userHistory?: { viewedCountries: Set<string>; viewedCities: Set<string> },
     userId?: string // Required for ML mode
@@ -617,8 +633,10 @@ export class AccommodationScoringService {
 
   /**
    * Apply Maximum Marginal Relevance for diversification (Enhanced - US-IA-011)
+   * Apply Maximum Marginal Relevance for diversification (Enhanced - US-IA-011)
    *
    * Greedy algorithm that selects hotels balancing relevance and diversity.
+   * Enhanced version includes destination-level diversity penalty.
    * Enhanced version includes destination-level diversity penalty.
    *
    * @param hotels - Sorted hotels by score
@@ -632,6 +650,7 @@ export class AccommodationScoringService {
     limit: number
   ): HotelWithVector[] {
     const lambda = this.config.diversityLambda;
+    const diversityConfig = this.config.diversityConfig;
     const diversityConfig = this.config.diversityConfig;
     const selected: HotelWithVector[] = [];
     const remaining = [...hotels];
@@ -660,12 +679,17 @@ export class AccommodationScoringService {
 
         // 1. Vector diversity (original MMR)
         let maxVectorSimilarity = 0;
+        // === DIVERSITY COMPONENTS ===
+
+        // 1. Vector diversity (original MMR)
+        let maxVectorSimilarity = 0;
         if (selected.length > 0) {
           for (const selectedHotel of selected) {
             const sim = this.calculateCosineSimilarity(
               candidate.vector,
               selectedHotel.vector
             );
+            maxVectorSimilarity = Math.max(maxVectorSimilarity, sim);
             maxVectorSimilarity = Math.max(maxVectorSimilarity, sim);
           }
         }
@@ -719,6 +743,23 @@ export class AccommodationScoringService {
       console.log(`[MMR] After checking all candidates: bestIndex=${bestIndex}, bestMMRScore=${bestMMRScore}`);
 
       if (bestIndex >= 0) {
+        const selectedHotel = remaining[bestIndex];
+        selected.push(selectedHotel);
+
+        // Update tracking sets
+        const country = selectedHotel.hotel.location?.country || '';
+        const city = selectedHotel.hotel.location?.city || '';
+
+        if (country) {
+          selectedCountries.add(country);
+          countryCount.set(country, (countryCount.get(country) || 0) + 1);
+        }
+
+        if (city) {
+          selectedCities.add(city);
+          cityCount.set(city, (cityCount.get(city) || 0) + 1);
+        }
+
         const selectedHotel = remaining[bestIndex];
         selected.push(selectedHotel);
 

@@ -71,6 +71,7 @@ export class AccommodationRecommendationService {
   private vectorizer: AccommodationVectorizerService;
   private scorer: AccommodationScoringService;
   private cache = CacheService;
+  private cache = CacheService;
 
   constructor() {
     this.vectorizer = new AccommodationVectorizerService();
