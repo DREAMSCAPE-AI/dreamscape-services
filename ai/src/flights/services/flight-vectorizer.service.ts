@@ -145,6 +145,13 @@ export class FlightVectorizerService {
   private transformAmadeusToFeatures(amadeusFlight: any): FlightFeatures {
     const flight = amadeusFlight;
 
+    // Detect if this is a SimplifiedFlightOfferDTO (from Voyage service)
+    // SimplifiedDTO has: { id, price, duration, stops, departure, arrival, airline, cabinClass, ... }
+    // Full Amadeus has: { id, itineraries, validatingAirlineCodes, price, travelerPricings, ... }
+    if (flight.airline && flight.departure && flight.arrival && !flight.itineraries) {
+      return this.transformSimplifiedToFeatures(flight);
+    }
+
     // Parse airline info
     const airlineCode = flight.validatingAirlineCodes?.[0] || flight.carrier || '';
     const airline = {
@@ -290,6 +297,173 @@ export class FlightVectorizerService {
       flightType,
       numberOfStops,
       segments: parsedSegments,
+      duration,
+      schedule,
+      price,
+      amenities,
+      bookingInfo,
+      popularity,
+      metadata,
+    };
+  }
+
+  /**
+   * Transform SimplifiedFlightOfferDTO to FlightFeatures
+   *
+   * Handles the simplified format returned by the Voyage service /flights/search endpoint.
+   *
+   * @param simplifiedFlight - SimplifiedFlightOfferDTO from Voyage service
+   * @returns Structured flight features
+   */
+  private transformSimplifiedToFeatures(simplifiedFlight: any): FlightFeatures {
+    // Parse airline info
+    const airlineCode = simplifiedFlight.airline?.code || '';
+    const airline = {
+      code: airlineCode,
+      name: simplifiedFlight.airline?.name || this.getAirlineName(airlineCode),
+      alliance: this.getAirlineAlliance(airlineCode),
+      rating: this.getAirlineRating(airlineCode),
+      isLowCost: this.isLowCostCarrier(airlineCode),
+    };
+
+    // Parse route from simplified format with enriched airport information
+    const originCode = simplifiedFlight.departure?.airport || '';
+    const destinationCode = simplifiedFlight.arrival?.airport || '';
+
+    const originInfo = this.getAirportInfo(originCode);
+    const destinationInfo = this.getAirportInfo(destinationCode);
+
+    const route = {
+      origin: {
+        airportCode: originCode,
+        airportName: originInfo.airportName,
+        cityCode: originInfo.cityCode,
+        cityName: originInfo.cityName,
+        countryCode: originInfo.countryCode,
+      },
+      destination: {
+        airportCode: destinationCode,
+        airportName: destinationInfo.airportName,
+        cityCode: destinationInfo.cityCode,
+        cityName: destinationInfo.cityName,
+        countryCode: destinationInfo.countryCode,
+      },
+      distance: 0,
+    };
+
+    // Parse flight class
+    const flightClass = this.parseFlightClass(simplifiedFlight.cabinClass || 'ECONOMY');
+
+    // Parse flight type from stops
+    const numberOfStops = simplifiedFlight.stops || 0;
+    const flightType = this.parseFlightType(numberOfStops);
+
+    // Helper to convert Date or string to ISO string
+    const toISOString = (dateOrString: any): string => {
+      if (!dateOrString) return '';
+      if (typeof dateOrString === 'string') return dateOrString;
+      if (dateOrString instanceof Date) return dateOrString.toISOString();
+      return '';
+    };
+
+    const departureTimeISO = toISOString(simplifiedFlight.departure?.time);
+    const arrivalTimeISO = toISOString(simplifiedFlight.arrival?.time);
+
+    // Parse segments (simplified doesn't have segments, so create a minimal one)
+    const segments = [{
+      departure: {
+        airportCode: simplifiedFlight.departure?.airport || '',
+        dateTime: departureTimeISO,
+        terminal: simplifiedFlight.departure?.terminal,
+      },
+      arrival: {
+        airportCode: simplifiedFlight.arrival?.airport || '',
+        dateTime: arrivalTimeISO,
+        terminal: simplifiedFlight.arrival?.terminal,
+      },
+      airline: airlineCode,
+      flightNumber: '',
+      aircraft: undefined,
+      duration: simplifiedFlight.duration || '',
+    }];
+
+    // Parse duration from ISO string (e.g., "PT2H30M")
+    const totalDuration = this.parseDuration(simplifiedFlight.duration || '');
+
+    const schedule = {
+      departureTime: departureTimeISO,
+      arrivalTime: arrivalTimeISO,
+      isOvernight: this.isOvernightFlight(departureTimeISO, arrivalTimeISO),
+      isRedEye: this.isRedEyeFlight(departureTimeISO),
+      timeOfDay: this.getTimeOfDay(departureTimeISO),
+    };
+
+    const duration = {
+      total: totalDuration,
+      flight: totalDuration,
+      layover: 0,
+    };
+
+    // Parse pricing
+    const price = {
+      amount: simplifiedFlight.price?.total || 0,
+      currency: simplifiedFlight.price?.currency || 'EUR',
+      perPerson: true,
+      taxesIncluded: true,
+      fareType: 'PUBLISHED',
+    };
+
+    // Parse amenities
+    const amenities = {
+      wifi: false,
+      power: false,
+      entertainment: false,
+      meals: this.calculateMeals(duration.total, flightClass),
+      baggage: {
+        cabin: {
+          allowed: simplifiedFlight.baggageAllowance?.cabinBags > 0 || true,
+          quantity: simplifiedFlight.baggageAllowance?.cabinBags || 1,
+          weight: 10,
+        },
+        checked: {
+          quantity: simplifiedFlight.baggageAllowance?.checkedBags || 1,
+          weight: 23,
+        },
+      },
+    };
+
+    // Parse booking info
+    const bookingInfo = {
+      seatsAvailable: simplifiedFlight.availableSeats || 9,
+      instantTicketing: false,
+      refundable: simplifiedFlight.isRefundable || false,
+      changeable: false,
+    };
+
+    // Popularity scores
+    const popularity = {
+      routePopularity: 0.5,
+      airlineRating: airline.rating || 3.5,
+      onTimePerformance: 0.75,
+      reviewCount: 0,
+    };
+
+    // Metadata
+    const metadata = {
+      codeshare: false,
+      cabinUpgradeAvailable: false,
+      tags: this.generateFlightTags(simplifiedFlight, flightType, price.amount),
+    };
+
+    return {
+      flightId: simplifiedFlight.id,
+      offerReference: simplifiedFlight.id,
+      airline,
+      route,
+      flightClass,
+      flightType,
+      numberOfStops,
+      segments,
       duration,
       schedule,
       price,
@@ -712,6 +886,7 @@ export class FlightVectorizerService {
       'VS': 'Virgin Atlantic',
       'TK': 'Turkish Airlines',
       'NH': 'ANA',
+      'EI': 'Aer Lingus',
     };
     return airlines[code] || code;
   }
@@ -757,6 +932,103 @@ export class FlightVectorizerService {
   private isLowCostCarrier(code: string): boolean {
     const lowCostCarriers = ['FR', 'U2', 'W6', 'NK', 'F9', 'G4', 'VY', 'TP'];
     return lowCostCarriers.includes(code);
+  }
+
+  /**
+   * Get airport information from IATA code
+   * Comprehensive database of major airports worldwide
+   */
+  private getAirportInfo(iataCode: string): {
+    airportName: string;
+    cityCode: string;
+    cityName: string;
+    countryCode: string;
+  } {
+    const airports: Record<string, { airportName: string; cityCode: string; cityName: string; countryCode: string }> = {
+      // Major US airports
+      'JFK': { airportName: 'John F. Kennedy International', cityCode: 'NYC', cityName: 'New York', countryCode: 'US' },
+      'EWR': { airportName: 'Newark Liberty International', cityCode: 'NYC', cityName: 'New York', countryCode: 'US' },
+      'LGA': { airportName: 'LaGuardia Airport', cityCode: 'NYC', cityName: 'New York', countryCode: 'US' },
+      'LAX': { airportName: 'Los Angeles International', cityCode: 'LAX', cityName: 'Los Angeles', countryCode: 'US' },
+      'ORD': { airportName: "O'Hare International", cityCode: 'CHI', cityName: 'Chicago', countryCode: 'US' },
+      'MIA': { airportName: 'Miami International', cityCode: 'MIA', cityName: 'Miami', countryCode: 'US' },
+      'SFO': { airportName: 'San Francisco International', cityCode: 'SFO', cityName: 'San Francisco', countryCode: 'US' },
+      'SEA': { airportName: 'Seattle-Tacoma International', cityCode: 'SEA', cityName: 'Seattle', countryCode: 'US' },
+      'BOS': { airportName: 'Logan International', cityCode: 'BOS', cityName: 'Boston', countryCode: 'US' },
+      'ATL': { airportName: 'Hartsfield-Jackson Atlanta International', cityCode: 'ATL', cityName: 'Atlanta', countryCode: 'US' },
+      'DFW': { airportName: 'Dallas/Fort Worth International', cityCode: 'DFW', cityName: 'Dallas', countryCode: 'US' },
+      'DEN': { airportName: 'Denver International', cityCode: 'DEN', cityName: 'Denver', countryCode: 'US' },
+      'PHX': { airportName: 'Phoenix Sky Harbor International', cityCode: 'PHX', cityName: 'Phoenix', countryCode: 'US' },
+      'IAH': { airportName: 'George Bush Intercontinental', cityCode: 'HOU', cityName: 'Houston', countryCode: 'US' },
+      'LAS': { airportName: 'Harry Reid International', cityCode: 'LAS', cityName: 'Las Vegas', countryCode: 'US' },
+
+      // European airports
+      'CDG': { airportName: 'Charles de Gaulle', cityCode: 'PAR', cityName: 'Paris', countryCode: 'FR' },
+      'ORY': { airportName: 'Orly', cityCode: 'PAR', cityName: 'Paris', countryCode: 'FR' },
+      'LHR': { airportName: 'Heathrow', cityCode: 'LON', cityName: 'London', countryCode: 'GB' },
+      'LGW': { airportName: 'Gatwick', cityCode: 'LON', cityName: 'London', countryCode: 'GB' },
+      'STN': { airportName: 'Stansted', cityCode: 'LON', cityName: 'London', countryCode: 'GB' },
+      'FRA': { airportName: 'Frankfurt', cityCode: 'FRA', cityName: 'Frankfurt', countryCode: 'DE' },
+      'MUC': { airportName: 'Munich', cityCode: 'MUC', cityName: 'Munich', countryCode: 'DE' },
+      'AMS': { airportName: 'Schiphol', cityCode: 'AMS', cityName: 'Amsterdam', countryCode: 'NL' },
+      'MAD': { airportName: 'Adolfo Suárez Madrid-Barajas', cityCode: 'MAD', cityName: 'Madrid', countryCode: 'ES' },
+      'BCN': { airportName: 'Barcelona-El Prat', cityCode: 'BCN', cityName: 'Barcelona', countryCode: 'ES' },
+      'FCO': { airportName: 'Leonardo da Vinci-Fiumicino', cityCode: 'ROM', cityName: 'Rome', countryCode: 'IT' },
+      'MXP': { airportName: 'Malpensa', cityCode: 'MIL', cityName: 'Milan', countryCode: 'IT' },
+      'ZRH': { airportName: 'Zurich', cityCode: 'ZRH', cityName: 'Zurich', countryCode: 'CH' },
+      'VIE': { airportName: 'Vienna International', cityCode: 'VIE', cityName: 'Vienna', countryCode: 'AT' },
+      'CPH': { airportName: 'Copenhagen', cityCode: 'CPH', cityName: 'Copenhagen', countryCode: 'DK' },
+      'ARN': { airportName: 'Stockholm Arlanda', cityCode: 'STO', cityName: 'Stockholm', countryCode: 'SE' },
+      'OSL': { airportName: 'Oslo Gardermoen', cityCode: 'OSL', cityName: 'Oslo', countryCode: 'NO' },
+      'LIS': { airportName: 'Lisbon Portela', cityCode: 'LIS', cityName: 'Lisbon', countryCode: 'PT' },
+      'DUB': { airportName: 'Dublin', cityCode: 'DUB', cityName: 'Dublin', countryCode: 'IE' },
+
+      // Middle East & Africa
+      'DXB': { airportName: 'Dubai International', cityCode: 'DXB', cityName: 'Dubai', countryCode: 'AE' },
+      'DOH': { airportName: 'Hamad International', cityCode: 'DOH', cityName: 'Doha', countryCode: 'QA' },
+      'IST': { airportName: 'Istanbul Airport', cityCode: 'IST', cityName: 'Istanbul', countryCode: 'TR' },
+      'CAI': { airportName: 'Cairo International', cityCode: 'CAI', cityName: 'Cairo', countryCode: 'EG' },
+      'JNB': { airportName: 'O.R. Tambo International', cityCode: 'JNB', cityName: 'Johannesburg', countryCode: 'ZA' },
+
+      // Asia-Pacific
+      'NRT': { airportName: 'Narita International', cityCode: 'TYO', cityName: 'Tokyo', countryCode: 'JP' },
+      'HND': { airportName: 'Haneda', cityCode: 'TYO', cityName: 'Tokyo', countryCode: 'JP' },
+      'ICN': { airportName: 'Incheon International', cityCode: 'SEL', cityName: 'Seoul', countryCode: 'KR' },
+      'PEK': { airportName: 'Beijing Capital International', cityCode: 'BJS', cityName: 'Beijing', countryCode: 'CN' },
+      'PVG': { airportName: 'Shanghai Pudong International', cityCode: 'SHA', cityName: 'Shanghai', countryCode: 'CN' },
+      'HKG': { airportName: 'Hong Kong International', cityCode: 'HKG', cityName: 'Hong Kong', countryCode: 'HK' },
+      'SIN': { airportName: 'Changi', cityCode: 'SIN', cityName: 'Singapore', countryCode: 'SG' },
+      'BKK': { airportName: 'Suvarnabhumi', cityCode: 'BKK', cityName: 'Bangkok', countryCode: 'TH' },
+      'KUL': { airportName: 'Kuala Lumpur International', cityCode: 'KUL', cityName: 'Kuala Lumpur', countryCode: 'MY' },
+      'SYD': { airportName: 'Sydney Kingsford Smith', cityCode: 'SYD', cityName: 'Sydney', countryCode: 'AU' },
+      'MEL': { airportName: 'Melbourne', cityCode: 'MEL', cityName: 'Melbourne', countryCode: 'AU' },
+      'DEL': { airportName: 'Indira Gandhi International', cityCode: 'DEL', cityName: 'New Delhi', countryCode: 'IN' },
+      'BOM': { airportName: 'Chhatrapati Shivaji Maharaj International', cityCode: 'BOM', cityName: 'Mumbai', countryCode: 'IN' },
+
+      // Canada & Latin America
+      'YYZ': { airportName: 'Toronto Pearson International', cityCode: 'YTO', cityName: 'Toronto', countryCode: 'CA' },
+      'YVR': { airportName: 'Vancouver International', cityCode: 'YVR', cityName: 'Vancouver', countryCode: 'CA' },
+      'YUL': { airportName: 'Montréal-Trudeau International', cityCode: 'YMQ', cityName: 'Montreal', countryCode: 'CA' },
+      'MEX': { airportName: 'Mexico City International', cityCode: 'MEX', cityName: 'Mexico City', countryCode: 'MX' },
+      'GRU': { airportName: 'São Paulo-Guarulhos International', cityCode: 'SAO', cityName: 'São Paulo', countryCode: 'BR' },
+      'GIG': { airportName: 'Rio de Janeiro-Galeão International', cityCode: 'RIO', cityName: 'Rio de Janeiro', countryCode: 'BR' },
+      'EZE': { airportName: 'Ministro Pistarini International', cityCode: 'BUE', cityName: 'Buenos Aires', countryCode: 'AR' },
+      'BOG': { airportName: 'El Dorado International', cityCode: 'BOG', cityName: 'Bogotá', countryCode: 'CO' },
+      'LIM': { airportName: 'Jorge Chávez International', cityCode: 'LIM', cityName: 'Lima', countryCode: 'PE' },
+    };
+
+    const info = airports[iataCode];
+    if (info) {
+      return info;
+    }
+
+    // Fallback: return the IATA code as both airport and city name
+    return {
+      airportName: iataCode,
+      cityCode: iataCode,
+      cityName: iataCode,
+      countryCode: '',
+    };
   }
 
   /**

@@ -263,7 +263,8 @@ export interface FlightRecommendationOptions {
   // Search parameters (passed to Amadeus)
   searchParams: {
     origin: string;           // Airport/city code
-    destination: string;      // Airport/city code
+    destination?: string;     // Single destination (legacy)
+    destinations?: string[];  // Multiple destinations for recommendation
     departureDate: string;    // YYYY-MM-DD
     returnDate?: string;      // For round-trip
     adults: number;
@@ -328,7 +329,7 @@ export interface FlightRecommendationResponse {
 
   metadata: {
     processingTime: number;         // milliseconds
-    strategy: string;               // "hybrid" | "popularity_fallback" | "hybrid_with_favorites"
+    strategy: string;               // "hybrid" | "popularity_fallback" | "hybrid_with_favorites" | "multi_destination"
     cacheHit: boolean;
     amadeusResponseTime?: number;
     scoringTime?: number;
@@ -336,6 +337,8 @@ export interface FlightRecommendationResponse {
       destinations: number;
       airlines: number;
     };
+    destinationsSearched?: string[];     // IATA codes searched (multi-destination mode)
+    destinationsWithResults?: string[];  // IATA codes that returned results
   };
 
   // Search context summary

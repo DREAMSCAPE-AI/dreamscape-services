@@ -146,7 +146,10 @@ export interface AccommodationFeatures {
     latitude: number;
     longitude: number;
     address: string;
-    cityCode: string;
+    city?: string; // City name (e.g., "Paris", "Rome")
+    cityCode: string; // IATA city code (e.g., "PAR", "ROM")
+    country?: string; // Country name (e.g., "France", "Italy")
+    countryCode?: string; // ISO 3166-1 alpha-2 country code (e.g., "FR", "IT")
     locationType: LocationType;
     distanceToCenter?: number; // km
   };
@@ -184,6 +187,12 @@ export interface AccommodationFeatures {
     hasSuites: boolean;
     hasConnectingRooms: boolean;
   };
+
+  // Media (images/photos)
+  media?: Array<{
+    uri: string;
+    category?: string;
+  }>;
 
   // Additional Metadata
   metadata?: {
@@ -276,6 +285,7 @@ export interface ScoredAccommodation {
     segmentBoost: number; // Segment-specific boost
     qualityScore: number; // Overall quality score
     finalScore: number; // Weighted combination
+    mlScore?: number; // Optional ML-based score (US-IA-009)
   };
 
   // Explanation for user
@@ -324,6 +334,21 @@ export interface RecommendationOptions {
     applySegmentBoost?: boolean; // default: true
   };
 
+  // User profile enrichment (from onboarding/settings)
+  userProfile?: {
+    budgetMin?: number;
+    budgetMax?: number;
+    currency?: string;
+    travelTypes?: string[];
+    accommodationTypes?: string[];
+    activityTypes?: string[];
+    preferredDestinations?: string[];
+    comfortLevel?: string;
+    travelStyle?: string;
+    travelGroupType?: string;
+    activityLevel?: string;
+  };
+
   // Result configuration
   limit?: number; // Max results to return (default: 20)
   diversityFactor?: number; // MMR lambda [0-1] (default: 0.3)
@@ -342,10 +367,12 @@ export interface RecommendationResponse {
 
   metadata: {
     processingTime: number; // milliseconds
-    strategy: string; // "hybrid" | "similarity_only" | "popularity_fallback"
+    strategy: string; // "hybrid" | "similarity_only" | "popularity_fallback" | "multi_destination"
     cacheHit: boolean;
     amadeusResponseTime?: number;
     scoringTime?: number;
+    citiesSearched?: string[]; // Cities that were searched
+    citiesWithResults?: string[]; // Cities that returned results
   };
 
   // Debugging info (only in dev mode)

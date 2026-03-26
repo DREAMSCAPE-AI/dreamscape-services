@@ -14,6 +14,7 @@ import {
   AccommodationFeatures,
   AccommodationVector,
   AccommodationCategory,
+  LocationType,
 } from '../types/accommodation-vector.types';
 import { DiversityConfig } from '../types/diversity-config.types';
 
@@ -41,19 +42,26 @@ describe('US-IA-011 - Destination Diversity Enforcement', () => {
         location: {
           country,
           city,
+          cityCode: city.substring(0, 3).toUpperCase(),
           latitude: 0,
           longitude: 0,
+          address: `Address in ${city}`,
+          locationType: LocationType.CITY_CENTER,
+          distanceToCenter: 1.0,
         },
         ratings: {
           overall: rating,
           numberOfReviews: 1000,
         },
-        category: AccommodationCategory.BOUTIQUE,
+        category: AccommodationCategory.BOUTIQUE_HOTEL,
         amenities: [],
-        priceLevel: 2,
-        distanceFromCenter: 1.0,
+        price: {
+          amount: 150,
+          currency: 'EUR',
+          perNight: true,
+        },
       },
-      vector: vector || [0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1],
+      vector: (vector || [0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]) as AccommodationVector,
     };
   }
 
@@ -164,7 +172,7 @@ describe('US-IA-011 - Destination Diversity Enforcement', () => {
       // Count hotels per country
       const countryCount = new Map<string, number>();
       results.forEach((r) => {
-        const country = r.accommodation.location.country;
+        const country = r.accommodation.location.country!; // Non-null assertion (test data always has country)
         countryCount.set(country, (countryCount.get(country) || 0) + 1);
       });
 

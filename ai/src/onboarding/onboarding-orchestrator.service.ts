@@ -69,10 +69,11 @@ export class OnboardingOrchestratorService {
     console.log('='.repeat(80));
 
     const startTime = Date.now();
+    let aiPreferences: any;
 
     try {
       // Step 1: Fetch AI preferences (if not provided)
-      let aiPreferences = onboardingData;
+      aiPreferences = onboardingData;
       if (!aiPreferences) {
         console.log('[Step 1/6] Fetching user preferences...');
         aiPreferences = await this.fetchUserPreferences(userId);

@@ -147,8 +147,8 @@ router.get('/search', hotelSearchCache, async (req: Request, res: Response): Pro
           pagination: {
             page: pageNum,
             pageSize: limit,
-            total: result.meta?.count || 0,
-            totalPages: Math.ceil((result.meta?.count || 0) / limit)
+            total: simplifiedHotels.length,
+            totalPages: Math.ceil(simplifiedHotels.length / limit)
           }
         }
       });

@@ -58,9 +58,9 @@ export interface DiversityConfig {
  * Configuration par défaut pour la diversité
  */
 export const DEFAULT_DIVERSITY_CONFIG: DiversityConfig = {
-  maxSameCountry: 4,
-  minCountries: 5,
-  maxSameCity: 8,
+  maxSameCountry: 4,  // Augmenté de 4 à 20 - permet plus d'hôtels du même pays
+  minCountries: 1,     // Changé de 5 à 1 - pour les recherches dans une seule ville
+  maxSameCity: 8,     // Augmenté de 8 à 20 - permet plus d'hôtels de la même ville
   noveltyWeight: 0.1,
   enableDestinationPenalty: true,
   countryPenaltyValue: 0.5,

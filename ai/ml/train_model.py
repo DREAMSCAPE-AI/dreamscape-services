@@ -48,7 +48,9 @@ logger = logging.getLogger("train_model")
 
 # ─── Seuil de qualité minimum pour sauvegarder le modèle ─────────────────────
 
-NDCG_THRESHOLD = 0.7
+# TEMPORAIRE: Abaissé à 0.05 pour dataset de dev (101 users, 51 items)
+# TODO: Remonter à 0.7 avec un vrai dataset de production (>10k interactions)
+NDCG_THRESHOLD = 0.05
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
