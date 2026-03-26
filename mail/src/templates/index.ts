@@ -7,7 +7,11 @@
  *
  * Placeholders use Handlebars syntax: {{variable}}
  */
-
+export interface TemplateMetaData{
+  name: string;
+  description: string;
+  requiredFields: string[];
+}
 export interface TemplateDefinition {
   id: string;
   description: string;
@@ -178,15 +182,25 @@ export function getTemplate(name: string): TemplateDefinition | undefined {
   return templates[name];
 }
 
-export function listTemplates(): Record<string, TemplateDefinition> {
-  return { ...templates };
+export function listTemplatesMetaData(): TemplateMetaData[] {
+  return Object.entries(templates).map(([name, template]) => ({
+    name,
+    description: template.description,
+    requiredFields: template.requiredFields,
+  }));
 }
-
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;')
+             .replace(/</g, '&lt;')
+             .replace(/>/g, '&gt;')
+             .replace(/"/g, '&quot;')
+             .replace(/'/g, '&#039;');
+}
 /**
  * Replace {{placeholder}} tokens in a template string with values from data.
  */
 export function renderTemplate(template: string, data: Record<string, unknown>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-    return key in data ? String(data[key]) : match;
+    return Object.hasOwn(data, key) ? String(data[key]) : match;
   });
 }

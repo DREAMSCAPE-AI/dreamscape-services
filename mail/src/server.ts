@@ -33,7 +33,7 @@ app.use('/api/v1/mail', mailRateLimiter, mailRoutes);
 
 // ── Error handling ──────────────────────────────────
 app.use(errorHandler);
-app.use('*', notFoundHandler);
+app.use(notFoundHandler);
 
 // ── Server start ────────────────────────────────────
 const startServer = async () => {

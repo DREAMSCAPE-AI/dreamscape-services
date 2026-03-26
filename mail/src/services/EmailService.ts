@@ -1,4 +1,5 @@
 import sgMail, { MailDataRequired } from '@sendgrid/mail';
+import sgClient from '@sendgrid/client';
 import config from '../config';
 import type { SendMailOptions, MailResult, MailHealthCheck } from '../types';
 
@@ -15,6 +16,7 @@ class EmailService {
       return;
     }
     sgMail.setApiKey(config.sendgrid.apiKey);
+    sgClient.setApiKey(config.sendgrid.apiKey);
     this.initialized = true;
     console.log('✅ SendGrid client initialized');
   }
@@ -28,8 +30,9 @@ class EmailService {
       });
       return { success: true, messageId: `dry-run-${Date.now()}` };
     }
-
-    const msg: MailDataRequired = {
+    
+    
+    const baseMsg = {
       to: options.to,
       from: {
         email: config.sendgrid.fromEmail,
@@ -37,6 +40,29 @@ class EmailService {
       },
       subject: options.subject,
     };
+
+    let msg: MailDataRequired;
+
+    if (options.templateId) {
+      msg = {
+        ...baseMsg,
+        templateId: options.templateId,
+      };
+      if (options.dynamicData) {
+        msg.dynamicTemplateData = options.dynamicData;
+      }
+    } else if (options.html) {
+      msg = {
+        ...baseMsg,
+        html: options.html,
+      };
+      if (options.text) msg.text = options.text;
+    } else {
+      msg = {
+        ...baseMsg,
+        text: options.text || '',
+      };
+    }
 
     if (options.templateId) {
       msg.templateId = options.templateId;
@@ -84,7 +110,19 @@ class EmailService {
   }
 
   async sendBatch(messages: SendMailOptions[]): Promise<MailResult[]> {
-    return Promise.all(messages.map((msg) => this.send(msg)));
+    const results: MailResult[] = [];
+    const delayMs = 200;
+    const concurrencyLimit = 5;
+
+    for (let i = 0; i < messages.length; i += concurrencyLimit) {
+      const batch = messages.slice(i, i + concurrencyLimit);
+      const batchResults = await Promise.all(batch.map((msg) => this.send(msg)));
+      results.push(...batchResults);
+      if (i + concurrencyLimit < messages.length) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+    return results;   
   }
 
   async verify(): Promise<MailHealthCheck> {
@@ -97,15 +135,25 @@ class EmailService {
 
     const start = Date.now();
     try {
-      // Lightweight verification: attempt to set api key (validates format)
-      sgMail.setApiKey(config.sendgrid.apiKey);
+      // Real connectivity check against a lightweight SendGrid account endpoint.
+      const [response] = await sgClient.request({
+        method: 'GET',
+        url: '/v3/user/account',
+      });
+
+      const statusCode = response.statusCode || 0;
+      const healthy = statusCode >= 200 && statusCode < 300;
       return {
-        healthy: true,
-        message: 'SendGrid client configured and ready',
+        healthy,
+        message: healthy
+          ? `SendGrid API reachable (status ${statusCode})`
+          : `SendGrid API returned status ${statusCode}`,
         responseTime: Date.now() - start,
       };
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'SendGrid verification failed';
+      const message = error instanceof Error
+        ? `SendGrid connectivity check failed: ${error.message}`
+        : 'SendGrid connectivity check failed';
       return {
         healthy: false,
         message,

@@ -110,7 +110,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3007
-      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:?SENDGRID_API_KEY is required}
       SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-no-reply@dreamscape.com}
       SENDGRID_FROM_NAME: ${SENDGRID_FROM_NAME:-DreamScape}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}

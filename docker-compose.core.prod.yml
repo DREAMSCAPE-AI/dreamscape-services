@@ -76,29 +76,6 @@ services:
       timeout: 10s
       retries: 3
 
-  # Mail Service (SendGrid)
-  mail-service:
-    build:
-      context: .
-      dockerfile: mail/Dockerfile.prod
-    container_name: dreamscape-mail-service
-    restart: unless-stopped
-    ports:
-      - "3007:3007"
-    environment:
-      NODE_ENV: production
-      PORT: 3007
-      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
-      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-no-reply@dreamscape.com}
-      SENDGRID_FROM_NAME: ${SENDGRID_FROM_NAME:-DreamScape}
-      KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
-    networks:
-      - core-network
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3007/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
 networks:
   core-network:

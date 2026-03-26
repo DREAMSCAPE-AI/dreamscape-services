@@ -25,6 +25,16 @@ const config = {
     windowMs: parseInt(process.env.MAIL_RATE_LIMIT_WINDOW_MS || '60000', 10),
     max: parseInt(process.env.MAIL_RATE_LIMIT_MAX || '10', 10),
   },
+
+  auth: {
+    apiKey: process.env.MAIL_API_KEY || '',
+  },
 };
+
+const isProduction = (process.env.NODE_ENV || '').toLowerCase() === 'production';
+
+if (isProduction && !process.env.SENDGRID_API_KEY) {
+  throw new Error('SENDGRID_API_KEY is required in production');
+}
 
 export default config;

@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import emailService from '../services/EmailService';
-import { getTemplate, listTemplates, renderTemplate } from '../templates';
+import { getTemplate, listTemplatesMetaData, renderTemplate } from '../templates';
 import type { SendMailOptions } from '../types';
+import { apiKeyAuth } from '../middleware/auth';
 
 const router = Router();
 
@@ -9,7 +10,7 @@ const router = Router();
  * POST /api/v1/mail/send
  * Send an email via SendGrid.
  */
-router.post('/send', async (req: Request, res: Response): Promise<void> => {
+router.post('/send', apiKeyAuth, async (req: Request, res: Response): Promise<void> => {
   const { to, subject, templateId, dynamicData, html, text, replyTo, cc, bcc } = req.body;
 
   if (!to || !subject) {
@@ -38,7 +39,7 @@ router.post('/send', async (req: Request, res: Response): Promise<void> => {
  * Send an email using a named template from the registry.
  * Uses SendGrid dynamic template if `id` is set, otherwise falls back to inline HTML.
  */
-router.post('/send-template', async (req: Request, res: Response): Promise<void> => {
+router.post('/send-template', apiKeyAuth, async (req: Request, res: Response): Promise<void> => {
   const { to, templateName, dynamicData } = req.body;
 
   if (!to || !templateName) {
@@ -100,8 +101,8 @@ router.post('/send-template', async (req: Request, res: Response): Promise<void>
  * GET /api/v1/mail/templates
  * List all available email templates.
  */
-router.get('/templates', (_req: Request, res: Response): void => {
-  res.status(200).json({ success: true, templates: listTemplates() });
+router.get('/templates', apiKeyAuth, (_req: Request, res: Response): void => {
+  res.status(200).json({ success: true, templates: listTemplatesMetaData() });
 });
 
 /**
@@ -121,7 +122,7 @@ router.get('/preview/:templateName', (req: Request, res: Response): void => {
   // Build sample data from required fields + query params
   const sampleData: Record<string, string> = {
     year: new Date().getFullYear().toString(),
-    firstName: 'Nicolas',
+    firstName: 'John',
     loginUrl: 'https://dreamscape.com/login',
     resetUrl: 'https://dreamscape.com/reset?token=sample-token',
     expiresIn: '15 minutes',
