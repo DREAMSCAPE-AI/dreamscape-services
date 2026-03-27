@@ -28,8 +28,12 @@ router.delete('/users/:id', userCtrl.deleteUser);
 
 // Bookings
 router.get('/bookings', bookingCtrl.listBookings);
+router.get('/bookings/export', bookingCtrl.exportBookings);   // BEFORE /:id
 router.get('/bookings/:id', bookingCtrl.getBooking);
 router.put('/bookings/:id/status', bookingCtrl.updateBookingStatus);
+router.put('/bookings/:id/cancel', bookingCtrl.cancelBooking);
+router.put('/bookings/:id/modify', bookingCtrl.modifyBooking);
+router.post('/bookings/:id/resend-email', bookingCtrl.resendEmail);
 router.put('/bookings/bulk/status', bookingCtrl.bulkUpdateBookingStatus);
 
 // Payments
