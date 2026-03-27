@@ -14,6 +14,7 @@
  * @module jobs/refresh-popularity
  */
 
+// @ts-ignore
 import cron from 'node-cron';
 import { prisma } from '@dreamscape/db';
 import { PopularityService } from '../recommendations/popularity.service';

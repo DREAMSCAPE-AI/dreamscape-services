@@ -8,6 +8,7 @@ import RecommendationService from '@/services/RecommendationService';
 import VectorizationService from '@/services/VectorizationService';
 import ScoringService from '@/services/ScoringService';
 import AnalyticsService from '@/services/AnalyticsService';
+import accommodationsRouter from './accommodations';
 
 const router = Router();
 
@@ -835,6 +836,7 @@ router.get('/flights', async (req: Request, res: Response): Promise<void> => {
       userId,
       origin,
       destination,
+      destinations,
       departureDate,
       returnDate,
       adults,
@@ -869,9 +871,9 @@ router.get('/flights', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    if (!origin || !destination || !departureDate || !adults) {
+    if (!origin || !departureDate || !adults) {
       res.status(400).json({
-        error: 'origin, destination, departureDate, and adults are required'
+        error: 'origin, departureDate, and adults are required'
       });
       return;
     }
@@ -879,10 +881,22 @@ router.get('/flights', async (req: Request, res: Response): Promise<void> => {
     // Build search params
     const searchParams: any = {
       origin: origin as string,
-      destination: destination as string,
       departureDate: departureDate as string,
       adults: parseInt(adults as string, 10),
     };
+
+    // Handle destination(s) - support 3 modes:
+    // 1. destinations[] - multiple destinations (preferred)
+    // 2. destination - single destination (legacy)
+    // 3. neither - auto-suggest destinations based on user profile
+    if (destinations) {
+      // Multiple destinations provided
+      searchParams.destinations = Array.isArray(destinations) ? destinations : [destinations];
+    } else if (destination) {
+      // Single destination (legacy mode)
+      searchParams.destination = destination as string;
+    }
+    // If neither is provided, the service will auto-suggest destinations
 
     if (returnDate) searchParams.returnDate = returnDate as string;
     if (children) searchParams.children = parseInt(children as string, 10);
@@ -1026,5 +1040,14 @@ router.get('/flights/status', async (req: Request, res: Response): Promise<void>
     });
   }
 });
+
+// =============================================================================
+// ACCOMMODATION RECOMMENDATIONS (US-IA-003)
+// =============================================================================
+// Mount the accommodations router which provides:
+// - GET /api/v1/recommendations/accommodations
+// - POST /api/v1/recommendations/accommodations/interactions
+// - GET /api/v1/recommendations/accommodations/status
+router.use(accommodationsRouter);
 
 export default router;

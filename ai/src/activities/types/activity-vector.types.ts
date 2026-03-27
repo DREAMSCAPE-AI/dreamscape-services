@@ -380,10 +380,12 @@ export interface ActivityRecommendationResponse {
 
   metadata: {
     processingTime: number; // milliseconds
-    strategy: string; // "hybrid" | "similarity_only" | "popularity_fallback"
+    strategy: string; // "hybrid" | "similarity_only" | "popularity_fallback" | "multi_destination"
     cacheHit: boolean;
     amadeusResponseTime?: number;
     scoringTime?: number;
+    citiesSearched?: string[]; // Cities that were searched
+    citiesWithResults?: string[]; // Cities that returned results
   };
 
   // Context summary
@@ -531,7 +533,7 @@ export const SEGMENT_ACTIVITY_BOOST: Record<string, Partial<Record<ActivityCateg
     [ActivityCategory.MARKET_VISIT]: 1.25,
     [ActivityCategory.HIKING]: 1.2,
     [ActivityCategory.SHOW]: 0.7,
-    [ActivityCategory.FINE_DINING]: 0.5,
+    [ActivityCategory.CULINARY_EXPERIENCE]: 0.5,
   },
   FAMILY_EXPLORER: {
     [ActivityCategory.FAMILY_ACTIVITY]: 1.4,

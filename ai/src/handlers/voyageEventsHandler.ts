@@ -15,48 +15,52 @@ import {
  * Handle voyage search performed event
  * Analyzes search patterns to improve destination predictions
  */
-export const handleVoyageSearchPerformed: MessageHandler<VoyageSearchPerformedPayload> = async ({
+export const handleVoyageSearchPerformed: MessageHandler<VoyageSearchPerformedPayload> = async (
   event,
-  message,
-}) => {
+  metadata
+) => {
   const { searchId, userId, sessionId, searchType, criteria, resultsCount, searchedAt } = event.payload;
 
   console.log(`[AI] Search performed: ${searchType} by user ${userId || 'anonymous'}`);
 
   try {
-    // Track search pattern
-    await trackSearchPattern({
-      userId: userId || sessionId,
-      searchType,
-      origin: criteria.origin,
-      destination: criteria.destination,
-      departureDate: criteria.departureDate,
-      returnDate: criteria.returnDate,
-      passengers: criteria.passengers,
-      timestamp: searchedAt,
-    });
-
-    // Update destination popularity
-    if (criteria.destination) {
-      await updateDestinationPopularity(criteria.destination, searchType);
-    }
-
-    // If user is logged in, update their interests
-    if (userId) {
-      await updateUserInterests(userId, {
+    // Track search pattern (criteria may be undefined for hotel searches)
+    if (criteria) {
+      await trackSearchPattern({
+        userId: userId || sessionId,
         searchType,
+        origin: criteria.origin,
         destination: criteria.destination,
-        class: criteria.class,
+        departureDate: criteria.departureDate,
+        returnDate: criteria.returnDate,
+        passengers: criteria.passengers,
+        timestamp: searchedAt,
       });
-    }
 
-    // Improve prediction model
-    await updatePredictionModel({
-      searchType,
-      origin: criteria.origin,
-      destination: criteria.destination,
-      resultsFound: resultsCount > 0,
-    });
+      // Update destination popularity
+      if (criteria.destination) {
+        await updateDestinationPopularity(criteria.destination, searchType);
+      }
+
+      // If user is logged in, update their interests
+      if (userId) {
+        await updateUserInterests(userId, {
+          searchType,
+          destination: criteria.destination,
+          class: criteria.class,
+        });
+      }
+
+      // Improve prediction model (only if criteria exists)
+      await updatePredictionModel({
+        searchType,
+        origin: criteria.origin,
+        destination: criteria.destination,
+        resultsFound: resultsCount > 0,
+      });
+    } else {
+      console.log(`[AI] Search ${searchId} has no criteria (likely hotel search)`);
+    }
 
     console.log(`✅ [AI] Analyzed search ${searchId}`);
   } catch (error) {
@@ -69,10 +73,10 @@ export const handleVoyageSearchPerformed: MessageHandler<VoyageSearchPerformedPa
  * Handle voyage booking created event
  * Improves prediction model and identifies travel trends
  */
-export const handleVoyageBookingCreated: MessageHandler<VoyageBookingCreatedPayload> = async ({
+export const handleVoyageBookingCreated: MessageHandler<VoyageBookingCreatedPayload> = async (
   event,
-  message,
-}) => {
+  metadata
+) => {
   const { bookingId, userId, bookingType, totalAmount, currency, items, travelers, createdAt } = event.payload;
 
   console.log(`[AI] Booking created: ${bookingType} by user ${userId} for ${totalAmount} ${currency}`);
@@ -94,7 +98,7 @@ export const handleVoyageBookingCreated: MessageHandler<VoyageBookingCreatedPayl
     // Identify travel trends
     const destinations = items
       .map(item => extractDestination(item.description))
-      .filter(Boolean);
+      .filter((dest): dest is string => dest !== null);
 
     for (const destination of destinations) {
       await updateTravelTrend(destination, bookingType, {
@@ -123,10 +127,10 @@ export const handleVoyageBookingCreated: MessageHandler<VoyageBookingCreatedPayl
  * Handle flight selected event
  * Tracks flight preferences for recommendations
  */
-export const handleFlightSelected: MessageHandler<VoyageFlightSelectedPayload> = async ({
+export const handleFlightSelected: MessageHandler<VoyageFlightSelectedPayload> = async (
   event,
-  message,
-}) => {
+  metadata
+) => {
   const { userId, sessionId, flightId, airline, origin, destination, price, currency, selectedAt } = event.payload;
 
   console.log(`[AI] Flight selected: ${origin} → ${destination} by ${airline}`);
@@ -156,10 +160,10 @@ export const handleFlightSelected: MessageHandler<VoyageFlightSelectedPayload> =
  * Handle hotel selected event
  * Tracks hotel preferences for recommendations
  */
-export const handleHotelSelected: MessageHandler<VoyageHotelSelectedPayload> = async ({
+export const handleHotelSelected: MessageHandler<VoyageHotelSelectedPayload> = async (
   event,
-  message,
-}) => {
+  metadata
+) => {
   const { userId, sessionId, hotelId, hotelName, location, roomType, price, currency, selectedAt } = event.payload;
 
   console.log(`[AI] Hotel selected: ${hotelName} in ${location}`);

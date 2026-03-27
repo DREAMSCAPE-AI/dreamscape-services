@@ -10,7 +10,6 @@ import activitiesRouter from './activities';
 import cartRouter from './cart';
 import bookingsRouter from './bookings';
 import itinerariesRouter from './itineraries';
-import bookingsRouter from './bookings';
 
 const router = Router();
 
@@ -28,12 +27,6 @@ router.use('/activities', activitiesRouter);
 
 // Cart and booking flow routes
 router.use('/cart', cartRouter);
-router.use('/bookings', bookingsRouter);
-
-// Bookings management routes
-router.use('/bookings', bookingsRouter);
-
-// Bookings management routes
 router.use('/bookings', bookingsRouter);
 
 // Itinerary management routes

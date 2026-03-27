@@ -47,6 +47,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy application code
 COPY ml/serve/ /app/serve/
 COPY ml/proto/ /app/proto/
+COPY ml/model.py /app/model.py
 
 # Generate protobuf code
 # Note: This assumes recommendation.proto is in /app/proto/
@@ -54,7 +55,9 @@ RUN python -m grpc_tools.protoc \
     -I/app/proto \
     --python_out=/app/proto \
     --grpc_python_out=/app/proto \
-    /app/proto/recommendation.proto
+    /app/proto/recommendation.proto && \
+    touch /app/proto/__init__.py && \
+    echo "import sys; sys.path.insert(0, '/app/proto')" > /app/proto/__init__.py
 
 # Create directories
 RUN mkdir -p /app/models /app/logs

@@ -58,19 +58,17 @@ router.get('/search', async (req: Request, res: Response): Promise<void> => {
     // Publish search performed event - DR-402 / DR-404
     voyageKafkaService.publishSearchPerformed({
       searchId: `search-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-      userId: (req as any).user?.id || 'anonymous',
+      sessionId: (req as any).user?.id || 'anonymous',
       searchType: 'flight',
-      origin: resolvedOrigin,
-      destination: resolvedDestination,
-      departureDate: departureDate as string,
-      returnDate: returnDate as string,
-      passengers: {
-        adults: parseInt(adults as string),
-        children: parseInt(children as string),
-        infants: parseInt(infants as string)
+      criteria: {
+        origin: resolvedOrigin,
+        destination: resolvedDestination,
+        departureDate: departureDate as string,
+        returnDate: returnDate as string,
+        passengers: parseInt(adults as string),
       },
       resultsCount: simplified.length,
-      timestamp: new Date()
+      searchedAt: new Date().toISOString(),
     }).catch(err => console.error('[FlightSearch] Failed to publish Kafka event:', err));
 
     res.json({

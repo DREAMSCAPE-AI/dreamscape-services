@@ -37,7 +37,7 @@ const createHealthChecker = () => {
                 connected: true,
                 responseTime,
               },
-            };
+            } as any;
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             return {
@@ -47,7 +47,7 @@ const createHealthChecker = () => {
                 connected: false,
                 error: errorMessage,
               },
-            };
+            } as any;
           }
         },
       },
