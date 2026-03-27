@@ -39,12 +39,6 @@ import {
   DiversityMetrics,
 } from '../types/diversity-config.types';
 import { MLGrpcClient, getMLClient } from '../../services/MLGrpcClient';
-import {
-  DiversityConfig,
-  DEFAULT_DIVERSITY_CONFIG,
-  DiversityMetrics,
-} from '../types/diversity-config.types';
-import { MLGrpcClient, getMLClient } from '../../services/MLGrpcClient';
 
 /**
  * Scoring configuration
@@ -78,13 +72,6 @@ export interface ScoringConfig {
   // MMR diversity
   diversityLambda: number;    // default: 0.7 (70% relevance, 30% diversity)
   applyDiversification: boolean; // default: true
-
-  // Destination-level diversity (US-IA-011)
-  diversityConfig: DiversityConfig;
-
-  // ML integration (US-IA-013)
-  useMLModel: boolean;            // default: false (rule-based only)
-  mlHybridWeight: number;         // default: 0.7 (70% ML, 30% rules)
 
   // Destination-level diversity (US-IA-011)
   diversityConfig: DiversityConfig;
