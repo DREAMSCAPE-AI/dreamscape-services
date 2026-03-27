@@ -19,6 +19,7 @@ import historyRoutes from '@routes/history';
 import gdprRoutes from './routes/gdpr';
 import notificationRoutes from './routes/notificationRoutes';
 import notificationPreferencesRoutes from './routes/notificationPreferencesRoutes';
+import adminRoutes from './routes/admin';
 import { socketService } from './services/SocketService';
 import notificationService from './services/NotificationService';
 import { auditLogger } from './middleware/auditLogger';
@@ -80,6 +81,7 @@ app.use('/api/v1/users/favorites', favoritesRoutes);
 app.use('/api/v1/users/gdpr', gdprRoutes);
 app.use('/api/v1/users/notifications', notificationRoutes);
 app.use('/api/v1/users/notification-preferences', notificationPreferencesRoutes);
+app.use('/api/v1/admin', adminRoutes);
 
 // Health check routes - INFRA-013.1
 app.use('/health', healthRoutes);
