@@ -178,9 +178,6 @@ export class AccommodationScoringService {
     limit: number = 20,
     userHistory?: { viewedCountries: Set<string>; viewedCities: Set<string> },
     userId?: string // Required for ML mode
-    limit: number = 20,
-    userHistory?: { viewedCountries: Set<string>; viewedCities: Set<string> },
-    userId?: string // Required for ML mode
   ): Promise<ScoredAccommodation[]> {
     console.log(`[Scoring] UserVector received:`, {
       length: userVector?.length,
@@ -651,7 +648,6 @@ export class AccommodationScoringService {
   ): HotelWithVector[] {
     const lambda = this.config.diversityLambda;
     const diversityConfig = this.config.diversityConfig;
-    const diversityConfig = this.config.diversityConfig;
     const selected: HotelWithVector[] = [];
     const remaining = [...hotels];
 
@@ -679,17 +675,12 @@ export class AccommodationScoringService {
 
         // 1. Vector diversity (original MMR)
         let maxVectorSimilarity = 0;
-        // === DIVERSITY COMPONENTS ===
-
-        // 1. Vector diversity (original MMR)
-        let maxVectorSimilarity = 0;
         if (selected.length > 0) {
           for (const selectedHotel of selected) {
             const sim = this.calculateCosineSimilarity(
               candidate.vector,
               selectedHotel.vector
             );
-            maxVectorSimilarity = Math.max(maxVectorSimilarity, sim);
             maxVectorSimilarity = Math.max(maxVectorSimilarity, sim);
           }
         }
@@ -743,23 +734,6 @@ export class AccommodationScoringService {
       console.log(`[MMR] After checking all candidates: bestIndex=${bestIndex}, bestMMRScore=${bestMMRScore}`);
 
       if (bestIndex >= 0) {
-        const selectedHotel = remaining[bestIndex];
-        selected.push(selectedHotel);
-
-        // Update tracking sets
-        const country = selectedHotel.hotel.location?.country || '';
-        const city = selectedHotel.hotel.location?.city || '';
-
-        if (country) {
-          selectedCountries.add(country);
-          countryCount.set(country, (countryCount.get(country) || 0) + 1);
-        }
-
-        if (city) {
-          selectedCities.add(city);
-          cityCount.set(city, (cityCount.get(city) || 0) + 1);
-        }
-
         const selectedHotel = remaining[bestIndex];
         selected.push(selectedHotel);
 
