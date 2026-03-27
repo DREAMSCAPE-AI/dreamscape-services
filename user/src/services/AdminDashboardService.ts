@@ -158,27 +158,57 @@ export async function getRevenueChart(period: Period) {
   }));
 }
 
-export async function getBookingsByDestination(limit: number = 5) {
+function extractDestination(type: string, data: any): string {
+  if (!data) return 'Inconnu';
+  switch (type) {
+    case 'FLIGHT':
+    case 'TRANSFER':
+      return data.to || data.destination || data.cityCode || 'Inconnu';
+    case 'HOTEL':
+      return data.city || data.destination || data.hotel || data.cityCode || 'Inconnu';
+    case 'ACTIVITY':
+      return data.city || data.destination || data.location || data.activity || 'Inconnu';
+    case 'PACKAGE':
+      return data.destination || data.city || data.cityCode || 'Inconnu';
+    default:
+      return data.destination || data.city || data.cityCode || data.to || 'Inconnu';
+  }
+}
+
+export async function getBookingsByDestination(limit: number = 5, period?: Period) {
+  const where: any = {
+    status: { in: ['CONFIRMED', 'COMPLETED', 'PENDING', 'PENDING_PAYMENT'] },
+  };
+  if (period) {
+    where.createdAt = { gte: period.startDate, lte: period.endDate };
+  }
+
   const bookings = await prisma.bookingData.findMany({
-    where: { status: { in: ['CONFIRMED', 'COMPLETED'] } },
-    select: { data: true },
+    where,
+    select: { type: true, data: true },
   });
 
   const destinationCounts: Record<string, number> = {};
   for (const booking of bookings) {
-    const data = booking.data as any;
-    const destination = data?.destination || data?.cityCode || data?.items?.[0]?.itemData?.cityCode || 'Unknown';
+    const destination = extractDestination(booking.type, booking.data as any);
     destinationCounts[destination] = (destinationCounts[destination] || 0) + 1;
   }
 
   return Object.entries(destinationCounts)
+    .filter(([dest]) => dest !== 'Inconnu')
     .sort(([, a], [, b]) => b - a)
     .slice(0, limit)
     .map(([destination, count]) => ({ destination, count }));
 }
 
-export async function getRecentTransactions(limit: number = 10) {
+export async function getRecentTransactions(limit: number = 10, period?: Period) {
+  const where: any = {};
+  if (period) {
+    where.createdAt = { gte: period.startDate, lte: period.endDate };
+  }
+
   const transactions = await prisma.paymentTransaction.findMany({
+    where,
     orderBy: { createdAt: 'desc' },
     take: limit,
   });

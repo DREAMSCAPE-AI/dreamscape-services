@@ -43,7 +43,12 @@ export const getRevenueChart = async (req: AuthRequest, res: Response): Promise<
 export const getBookingsByDestination = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const limit = parseInt(req.query.limit as string) || 5;
-    const data = await AdminDashboardService.getBookingsByDestination(limit);
+    const periodParam = (req.query.period as string) || '7d';
+    const startDate = req.query.startDate as string | undefined;
+    const endDate = req.query.endDate as string | undefined;
+
+    const period = AdminDashboardService.parsePeriod(periodParam, startDate, endDate);
+    const data = await AdminDashboardService.getBookingsByDestination(limit, period);
     sendSuccess(res, data);
   } catch (error: any) {
     console.error('Error fetching bookings by destination:', error);
@@ -54,7 +59,12 @@ export const getBookingsByDestination = async (req: AuthRequest, res: Response):
 export const getRecentTransactions = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const limit = parseInt(req.query.limit as string) || 10;
-    const data = await AdminDashboardService.getRecentTransactions(limit);
+    const periodParam = (req.query.period as string) || '7d';
+    const startDate = req.query.startDate as string | undefined;
+    const endDate = req.query.endDate as string | undefined;
+
+    const period = AdminDashboardService.parsePeriod(periodParam, startDate, endDate);
+    const data = await AdminDashboardService.getRecentTransactions(limit, period);
     sendSuccess(res, data);
   } catch (error: any) {
     console.error('Error fetching recent transactions:', error);

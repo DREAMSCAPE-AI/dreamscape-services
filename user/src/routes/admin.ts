@@ -3,6 +3,8 @@ import { authenticateToken } from '@middleware/auth';
 import { requireAdmin } from '@middleware/requireAdmin';
 import * as dashboardCtrl from '../controllers/adminDashboardController';
 import * as userCtrl from '../controllers/adminUserController';
+import * as bookingCtrl from '../controllers/adminBookingController';
+import * as paymentCtrl from '../controllers/adminPaymentController';
 
 const router = Router();
 
@@ -19,5 +21,16 @@ router.get('/users', userCtrl.listUsers);
 router.get('/users/:id', userCtrl.getUser);
 router.put('/users/:id', userCtrl.updateUser);
 router.delete('/users/:id', userCtrl.deleteUser);
+
+// Bookings
+router.get('/bookings', bookingCtrl.listBookings);
+router.get('/bookings/:id', bookingCtrl.getBooking);
+router.put('/bookings/:id/status', bookingCtrl.updateBookingStatus);
+router.put('/bookings/bulk/status', bookingCtrl.bulkUpdateBookingStatus);
+
+// Payments
+router.get('/payments', paymentCtrl.listPayments);
+router.get('/payments/:id', paymentCtrl.getPayment);
+router.put('/payments/:id/status', paymentCtrl.updatePaymentStatus);
 
 export default router;
