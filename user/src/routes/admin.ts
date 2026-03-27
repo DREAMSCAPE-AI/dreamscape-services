@@ -16,10 +16,14 @@ router.get('/dashboard/revenue-chart', dashboardCtrl.getRevenueChart);
 router.get('/dashboard/bookings-by-destination', dashboardCtrl.getBookingsByDestination);
 router.get('/dashboard/recent-transactions', dashboardCtrl.getRecentTransactions);
 
-// Users CRUD
+// Users
 router.get('/users', userCtrl.listUsers);
+router.get('/users/export', userCtrl.exportUsers);   // BEFORE /:id
 router.get('/users/:id', userCtrl.getUser);
+router.get('/users/:id/activity', userCtrl.getUserActivity);
 router.put('/users/:id', userCtrl.updateUser);
+router.put('/users/:id/suspend', userCtrl.suspendUser);
+router.put('/users/:id/reactivate', userCtrl.reactivateUser);
 router.delete('/users/:id', userCtrl.deleteUser);
 
 // Bookings
