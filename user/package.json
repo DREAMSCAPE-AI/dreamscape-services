@@ -23,6 +23,7 @@
     "@dreamscape/db": "file:../db",
     "@dreamscape/kafka": "file:../shared/kafka",
     "@prisma/client": "^5.7.1",
+    "@sendgrid/mail": "^8.1.6",
     "axios": "^1.6.2",
     "bcryptjs": "^3.0.2",
     "compression": "^1.7.4",
