@@ -64,17 +64,6 @@ class EmailService {
       };
     }
 
-    if (options.templateId) {
-      msg.templateId = options.templateId;
-      if (options.dynamicData) {
-        msg.dynamicTemplateData = options.dynamicData;
-      }
-    } else if (options.html) {
-      msg.html = options.html;
-      if (options.text) msg.text = options.text;
-    } else if (options.text) {
-      msg.text = options.text;
-    }
 
     if (options.replyTo) msg.replyTo = options.replyTo;
     if (options.cc) msg.cc = options.cc;
