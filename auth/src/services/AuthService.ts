@@ -95,6 +95,7 @@ export class AuthService {
           firstName: true,
           lastName: true,
           isVerified: true,
+          isSuspended: true,
           role: true,
           onboardingCompleted: true,
           onboardingCompletedAt: true,
@@ -102,20 +103,27 @@ export class AuthService {
           updatedAt: true,
         }
       });
-  
+
       if (!user) {
         return {
           success: false,
           message: 'Invalid email or password'
         };
       }
-  
+
       const isPasswordValid = await bcrypt.compare(loginData.password, user.password);
-  
+
       if (!isPasswordValid) {
         return {
           success: false,
           message: 'Invalid email or password'
+        };
+      }
+
+      if (user.isSuspended) {
+        return {
+          success: false,
+          message: 'Your account has been suspended. Please contact support.'
         };
       }
   
@@ -194,8 +202,20 @@ export class AuthService {
           message: 'Invalid or expired refresh token'
         };
       }
-  
-     
+
+      const userRecord = await prisma.user.findUnique({
+        where: { id: decoded.userId },
+        select: { isSuspended: true }
+      });
+
+      if (userRecord?.isSuspended) {
+        await prisma.session.delete({ where: { id: sessionRecord.id } });
+        return {
+          success: false,
+          message: 'Your account has been suspended. Please contact support.'
+        };
+      }
+
       const deleteResult = await prisma.session.delete({
         where: { id: sessionRecord.id }
       });

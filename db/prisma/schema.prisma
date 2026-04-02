@@ -43,6 +43,11 @@ model User {
   onboardingCompleted   Boolean   @default(false)
   onboardingCompletedAt DateTime?
 
+  // Suspension (US-ADMIN-003)
+  isSuspended     Boolean   @default(false)
+  suspendedAt     DateTime?
+  suspendedReason String?
+
   // AI Recommendation System (IA-001.1)
   userVector      UserVector?
   recommendations Recommendation[]
