@@ -201,6 +201,7 @@ function escapeHtml(text: string): string {
  */
 export function renderTemplate(template: string, data: Record<string, unknown>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-    return Object.hasOwn(data, key) ? String(data[key]) : match;
+    if (!Object.hasOwn(data, key)) return match;
+    return escapeHtml(String(data[key]));
   });
 }

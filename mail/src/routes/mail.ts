@@ -153,7 +153,7 @@ router.get('/preview/:templateName', (req: Request, res: Response): void => {
 
   res.setHeader('Content-Type', 'text/html');
   res.status(200).send(`
-    <!-- Subject: ${renderedSubject} -->
+    <div style="display:none">${renderedSubject}</div>
     ${renderedHtml}
   `);
 });
