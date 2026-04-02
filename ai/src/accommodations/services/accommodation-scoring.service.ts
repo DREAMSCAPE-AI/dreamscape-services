@@ -222,7 +222,7 @@ export class AccommodationScoringService {
           ? this.getSegmentBoost(userSegment, features.category)
           : 1.0;
 
-        const baseScoreWithSegment = baseScore * segmentBoost;
+        const baseScoreWithSegment = Math.min(1.0, baseScore * segmentBoost); // cap so novelty weight always has effect (US-IA-011)
 
         // Apply novelty bonus (US-IA-011 - Encourages exploration)
         const noveltyWeight = this.config.diversityConfig.noveltyWeight;
@@ -585,6 +585,10 @@ export class AccommodationScoringService {
         score = 0.6 * starScore + 0.4 * ratingScore;
       } else if (hotel.starRating) {
         score = (hotel.starRating - 1) / 4;
+      } else if (hotel.ratings?.overall) {
+        // Hotel has overall rating but no starRating — use as quality proxy
+        const maxRating = hotel.ratings.overall > 5 ? 10 : 5;
+        score = Math.max(0, hotel.ratings.overall / maxRating);
       }
     }
 
