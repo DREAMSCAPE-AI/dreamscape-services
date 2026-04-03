@@ -36,5 +36,8 @@ const isProduction = (process.env.NODE_ENV || '').toLowerCase() === 'production'
 if (isProduction && !process.env.SENDGRID_API_KEY) {
   throw new Error('SENDGRID_API_KEY is required in production');
 }
+if (isProduction && !process.env.MAIL_API_KEY) {
+  throw new Error('MAIL  _API_KEY is required in production');
+}
 
 export default config;

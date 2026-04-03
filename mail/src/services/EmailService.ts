@@ -98,22 +98,6 @@ class EmailService {
     }
   }
 
-  async sendBatch(messages: SendMailOptions[]): Promise<MailResult[]> {
-    const results: MailResult[] = [];
-    const delayMs = 200;
-    const concurrencyLimit = 5;
-
-    for (let i = 0; i < messages.length; i += concurrencyLimit) {
-      const batch = messages.slice(i, i + concurrencyLimit);
-      const batchResults = await Promise.all(batch.map((msg) => this.send(msg)));
-      results.push(...batchResults);
-      if (i + concurrencyLimit < messages.length) {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      }
-    }
-    return results;   
-  }
-
   async verify(): Promise<MailHealthCheck> {
     if (!this.initialized) {
       return {
