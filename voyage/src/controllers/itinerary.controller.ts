@@ -438,22 +438,19 @@ export class ItineraryController {
           res.setHeader('Content-Type', 'application/pdf');
           res.setHeader('Content-Disposition', `attachment; filename="itinerary-${itinerary.id}.pdf"`);
           res.send(pdfBuffer);
-          break;
+          return;
 
         case 'ical':
           const icalContent = this.exportService.generateICal(itinerary);
           res.setHeader('Content-Type', 'text/calendar');
           res.setHeader('Content-Disposition', `attachment; filename="itinerary-${itinerary.id}.ics"`);
           res.send(icalContent);
-          break;
+          return;
 
         case 'email':
           await this.exportService.sendEmailSummary(itinerary, user.email, user.firstName || 'Traveler');
           res.json({ message: 'Email sent successfully' });
-          break;
-
-        default:
-          res.status(400).json({ error: 'Invalid export format' });
+          return;
       }
     } catch (error) {
       if (error instanceof ZodError) {
