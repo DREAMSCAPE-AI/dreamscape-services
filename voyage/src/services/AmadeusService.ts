@@ -574,33 +574,12 @@ class AmadeusService {
     try {
       await this.authenticate();
 
-      const DEBUG_MODE = false; // Set to true to enable detailed logging
-
-      if (DEBUG_MODE) {
-        console.log('🚀 [AmadeusService] Searching activities with params:', params);
-      }
-
       // Use cache wrapper to avoid repeated API calls
       return await cacheService.cacheWrapper(
         'activities',
         params,
         async () => {
           const response = await this.api.get('/v1/shopping/activities', { params });
-
-          if (DEBUG_MODE) {
-            console.log('✅ [AmadeusService] Activities search successful');
-            console.log('📊 [AmadeusService] Response structure:', {
-              hasData: !!response.data?.data,
-              dataCount: response.data?.data?.length || 0,
-              hasMeta: !!response.data?.meta
-            });
-
-            if (response.data?.data && response.data.data.length > 0) {
-              const firstActivity = response.data.data[0];
-              console.log('📍 [AmadeusService] First activity raw data:', JSON.stringify(firstActivity, null, 2));
-            }
-          }
-
           return response.data;
         }
       );

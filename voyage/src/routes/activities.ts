@@ -31,7 +31,9 @@ router.get('/search', async (req: Request, res: Response): Promise<void> => {
     if (latitude && longitude) {
       searchParams.latitude = parseFloat(latitude as string);
       searchParams.longitude = parseFloat(longitude as string);
-      if (radius) searchParams.radius = parseInt(radius as string);
+      if (radius) {
+        searchParams.radius = parseInt(radius as string);
+      }
     } else {
       searchParams.north = parseFloat(north as string);
       searchParams.west = parseFloat(west as string);
@@ -40,44 +42,12 @@ router.get('/search', async (req: Request, res: Response): Promise<void> => {
     }
 
     const result = await AmadeusService.searchActivities(searchParams);
+    console.log(`Activities search: ${result.data?.length || 0} activities found for ${locationName || 'unknown location'}`);
 
-    // 🔍 DEBUG: Log raw Amadeus API response structure (only in debug mode)
-    const DEBUG_MODE = false; // Set to true to enable detailed logging
-
-    if (DEBUG_MODE) {
-      console.log('🔍 [DEBUG] Raw Amadeus Activities API Response:');
-      console.log('📊 Total activities returned:', result.data?.length || 0);
-
-      if (result.data && result.data.length > 0) {
-        console.log('📍 First activity structure:', JSON.stringify(result.data[0], null, 2));
-        console.log('🏷️ First activity name:', result.data[0].name);
-        console.log('🌍 First activity geoCode:', result.data[0].geoCode);
-        console.log('📌 First activity location fields:', {
-          geoCode: result.data[0].geoCode,
-          locationName: result.data[0].locationName,
-          city: result.data[0].city,
-          address: result.data[0].address,
-          destination: result.data[0].destination
-        });
-      }
-    } else {
-      // Just log basic info in production
-      console.log(`✅ Activities search: ${result.data?.length || 0} activities found for ${locationName || 'unknown location'}`);
-    }
-
-    // Pass location context to mapper
     const simplifiedActivities = ActivityMapper.mapAmadeusToSimplified(
       result.data || [],
       locationName as string
     );
-
-    // 🔍 DEBUG: Log mapped activities (only in debug mode)
-    if (DEBUG_MODE) {
-      console.log('🗺️ [DEBUG] Mapped activities:');
-      if (simplifiedActivities.length > 0) {
-        console.log('📍 First mapped activity location:', simplifiedActivities[0].location);
-      }
-    }
 
     res.json({
       data: simplifiedActivities,
@@ -95,14 +65,6 @@ router.get('/search', async (req: Request, res: Response): Promise<void> => {
 router.get('/details/:activityId', async (req: Request, res: Response): Promise<void> => {
   try {
     const { activityId } = req.params;
-
-    if (!activityId) {
-      res.status(400).json({
-        error: 'Activity ID is required'
-      });
-      return;
-    }
-
     const result = await AmadeusService.getActivityById(activityId);
 
     if (!result.data) {
@@ -130,14 +92,6 @@ router.get('/details/:activityId', async (req: Request, res: Response): Promise<
 router.get('/:activityId', async (req: Request, res: Response): Promise<void> => {
   try {
     const { activityId } = req.params;
-
-    if (!activityId) {
-      res.status(400).json({
-        error: 'Activity ID is required'
-      });
-      return;
-    }
-
     const result = await AmadeusService.getActivityById(activityId);
 
     if (!result.data) {
