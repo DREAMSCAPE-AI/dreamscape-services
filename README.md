@@ -1,193 +1,212 @@
-🔧 DreamScape Backend Services
+# DreamScape Backend Services
 
-> **Microservices Backend Platform** - Tous les services backend DreamScape
+> **Microservices Backend Platform** — Tous les services backend DreamScape
 
-## 📁 Structure des Services
+## Structure des services
 
-- **auth/** - Service d'authentification & autorisation (Port 3001)
-- **user/** - Service gestion utilisateurs & profils (Port 3002)
-- **voyage/** - Service voyage, réservation & API Amadeus (Port 3003)
-- **payment/** - Service paiement & transactions (Port 3004)
-- **ai/** - Service IA & recommandations personnalisées (Port 3005)
-- **panorama/** - Service panorama/VR immersif (Port 3006)
+| Dossier | Port | Description |
+|---------|------|-------------|
+| `auth/` | 3001 | Authentification & gestion des JWT |
+| `user/` | 3002 | Profils, préférences, GDPR, notifications |
+| `voyage/` | 3003 | Recherche & réservation voyage (Amadeus) |
+| `payment/` | 3004 | Paiements & webhooks (Stripe) |
+| `ai/` | 3005 | Recommandations IA personnalisées |
+| `db/` | — | Schéma Prisma partagé (PostgreSQL) |
+| `shared/` | — | Package `@dreamscape/kafka` (Kafka utilities) |
 
-## 🛠️ Stack Technique
+## Stack technique
 
-### **Backend Core**
-- **Node.js 18+** - Environnement d'exécution
-- **Express** - Framework web
-- **TypeScript** - Type safety
-- **Prisma** - ORM base de données
+### Backend Core
+- **Node.js 18+** — Environnement d'exécution
+- **Express 4** — Framework web
+- **TypeScript** (strict, ES2022, commonjs) — Type safety
+- **Prisma** — ORM, client partagé via `@dreamscape/db`
 
-### **Bases de Données**
-- **PostgreSQL** - Données principales
-- **MongoDB** - Documents & analytics
-- **Redis** - Cache & sessions
+### Bases de données
+- **PostgreSQL** — Données principales pour tous les services (schéma unifié 800+ lignes)
+- **Redis** — Cache, sessions, rate limiting (dégradation gracieuse si indisponible)
 
-### **External APIs**
-- **Amadeus SDK** - API voyage & réservations
-- **OpenAI API** - Intelligence artificielle
-- **Stripe API** - Paiements sécurisés
+### APIs externes
+- **Amadeus SDK** — Recherche vols, hôtels, activités
+- **OpenAI API** — Recommandations IA
+- **Stripe API** — Paiements et webhooks
 
-### **Architecture**
-- **JWT Authentication** - Sécurité inter-services
-- **Circuit Breaker** - Résilience API externes
-- **Rate Limiting** - Protection contre les abus
-- **Event-Driven** - Communication asynchrone
+### Communication
+- **HTTP/REST** — Synchrone inter-services via axios + JWT
+- **Kafka (kafkajs)** — Asynchrone event-driven, topics `dreamscape.<domain>.<event>`
+- **Socket.io** — Notifications temps réel (User Service)
 
-## 🚀 Quick Start
-
-### Développement Local
-```bash
-# Installation des dépendances
-npm install
-
-# Variables d'environnement
-cp .env.example .env
-
-# Base de données
-npm run migrate
-npm run seed
-
-# Démarrer tous les services
-docker-compose up -d
-
-# Ou service individuel
-cd auth && npm install && npm run dev
-```
-
-### Ports par Défaut
-| Service  | Port | Description                    |
-|----------|------|--------------------------------|
-| Auth     | 3001 | Authentification & JWT         |
-| User     | 3002 | Profils & préférences         |
-| Voyage   | 3003 | Recherches & réservations     |
-| Payment  | 3004 | Paiements & transactions      |
-| AI       | 3005 | Recommandations IA            |
-| Panorama | 3006 | Expériences VR                |
-
-## 📊 Communication Inter-Services
-
-```
-┌─────────────────┐    ┌─────────────────┐
-│   API Gateway   │────│   Auth Service  │
-│     (3000)      │    │     (3001)      │
-└─────────────────┘    └─────────────────┘
-         │                       │
-         ├───────┬───────┬───────┼───────┬────────┐
-         │       │       │       │       │        │
-    ┌─────────┐ │  ┌─────────┐ │  ┌─────────┐   │
-    │  User   │ │  │ Voyage  │ │  │   AI    │   │
-    │ (3002)  │ │  │ (3003)  │ │  │ (3005)  │   │
-    └─────────┘ │  └─────────┘ │  └─────────┘   │
-         │       │       │       │       │        │
-    ┌─────────┐ │  ┌─────────────────┐   │   ┌─────────┐
-    │Payment  │ │  │    Panorama     │   │   │  Redis  │
-    │ (3004)  │ │  │     (3006)      │   │   │ Cache   │
-    └─────────┘ │  └─────────────────┘   │   └─────────┘
-                │                        │
-           ┌─────────────┐         ┌─────────────┐
-           │ PostgreSQL  │         │  MongoDB    │
-           │  Primary    │         │ Analytics   │
-           └─────────────┘         └─────────────┘
-```
-
-## 🧪 Tests & Qualité
+## Quick Start
 
 ```bash
-# Tests unitaires
-npm run test
+# Démarrer l'infrastructure (depuis la racine du monorepo)
+make db          # PostgreSQL + Redis
 
-# Tests d'intégration
-npm run test:integration
+# Chaque service individuellement
+cd auth    && npm install && npm run dev    # :3001
+cd user    && npm install && npm run dev    # :3002
+cd voyage  && npm install && npm run dev    # :3003
+cd payment && npm install && npm run dev    # :3004 (nodemon + ts-node)
+cd ai      && npm install && npm run dev    # :3005
 
-# Couverture de code
-npm run test:coverage
-
-# Linting & formatage
-npm run lint
-npm run lint:fix
+# Ou via Docker Compose (depuis dreamscape-infra/)
+docker-compose -f docker/docker-compose.core-pod.yml up -d      # Core Pod
+docker-compose -f docker/docker-compose.business-pod.yml up -d  # Business Pod
 ```
 
-## 🚀 Déploiement
+## Base de données
+
+Tous les services partagent **un seul schéma Prisma** :
 
 ```bash
-# Build production
-npm run build
+# Après toute modification du schéma
+cd db && npm run db:generate   # Régénérer le client Prisma
 
-# Images Docker
-npm run docker:build
-
-# Déploiement K8s
-kubectl apply -f k8s/
-
-# Terraform infrastructure
-cd terraform && terraform apply
+# Chaque service doit aussi régénérer
+cd auth    && npx prisma generate
+cd user    && npx prisma generate
+cd voyage  && npx prisma generate
+cd payment && npx prisma generate
+cd ai      && npx prisma generate
 ```
 
-## 🔐 Sécurité
+```env
+# Pattern DATABASE_URL (tous services)
+DATABASE_URL="postgresql://dreamscape_user:password@localhost:5432/dreamscape"
+```
 
-- **JWT Authentication** avec refresh tokens
-- **RBAC** (Role-Based Access Control)
-- **API Rate Limiting** par service
-- **Input Validation** & sanitisation
-- **HTTPS/TLS** encryption
-- **Secrets Management** via vault
+> Utiliser `npx prisma db push` en développement (évite les conflits shadow DB de `migrate dev`).
 
-## 📈 Monitoring
+## Package partagé Kafka
 
-- **Health Checks** - `/health` sur chaque service
-- **Prometheus Metrics** - Métriques applicatives
-- **Structured Logging** - JSON centralisé
-- **Error Tracking** - Sentry intégration
+```bash
+# Après modification de shared/kafka/src/
+cd shared/kafka && npm run build   # OBLIGATOIRE avant usage dans les services
+```
 
-## 📚 Services Documentation
+Les services consomment `@dreamscape/kafka` via `file:../shared/kafka`.
 
-### Auth Service (3001)
-- JWT token generation & validation
-- User authentication & authorization
-- Role-based access control
-- Password hashing & security
+## Communication inter-services
 
-### User Service (3002)  
-- User profile management
-- Preferences & settings
-- Activity tracking
-- User analytics
+### HTTP (synchrone)
+```
+Gateway (4000) → Auth Service  (3001) /api/v1/auth/*
+               → User Service  (3002) /api/v1/users/*
+               → Voyage Service (3003) /api/v1/voyages/*
+               → Payment Service (3004) /api/v1/payment/*
+               → AI Service    (3005) /api/v1/ai/*
+```
 
-### Voyage Service (3003)
-- Flight search & booking (Amadeus API)
-- Hotel & accommodation booking
-- Activity & experience booking
-- Itinerary management
-- Booking lifecycle management
+### Kafka (asynchrone)
+```
+dreamscape.user.created              — auth → user
+dreamscape.user.preferences.updated — user → ai
+dreamscape.voyage.booking.created   — voyage → payment
+dreamscape.payment.initiated        — payment publishes
+dreamscape.payment.completed        — payment → voyage + user (Saga)
+dreamscape.payment.failed           — payment → voyage + user (Saga)
+```
 
-### Payment Service (3004)
-- Stripe payment integration
-- Transaction management
-- Refund processing
-- Payment analytics
+> Toujours publier avec `.catch()` pour ne pas bloquer les réponses HTTP.
 
-### AI Service (3005)
-- Personalized recommendations
-- User behavior analysis
-- Predictive analytics
-- OpenAI integration
+## Health checks
 
-### Panorama Service (3006)
-- VR/360° experience management
-- Panoramic content delivery
-- Immersive navigation
-- Media processing
+Chaque service expose `/health` :
 
-## 🤝 Contributing
+```json
+{
+  "status": "healthy",
+  "uptime": 123.45,
+  "database": "connected",
+  "cache": "connected",
+  "memory": { "used": "150MB", "total": "512MB" }
+}
+```
 
-1. **Branch Naming**: `feature/service-name/description`
-2. **Commit Convention**: Conventional commits
-3. **Pull Requests**: Must pass all tests
-4. **Code Review**: Required before merge
+```bash
+curl http://localhost:3001/health   # auth
+curl http://localhost:3002/health   # user
+curl http://localhost:3003/health   # voyage
+curl http://localhost:3004/health   # payment
+curl http://localhost:3005/health   # ai
+```
 
-## 📄 License
+## Tests
 
-Propriétaire et confidentiel © DreamScape 2025
+```bash
+# Par service
+cd auth  && npm run test:unit && npm run test:integration
+cd user  && npm run test:unit && npm run test:integration
 
+# Coverage (seuil 70%)
+cd auth && npm run test:coverage
+
+# Depuis dreamscape-tests/
+npm run test:integration:auth
+npm run test:integration:user
+npm run test:integration:kafka
+```
+
+## Variables d'environnement
+
+**Communes à tous les services** :
+```env
+NODE_ENV=development
+PORT=300X
+DATABASE_URL=postgresql://...
+JWT_SECRET=shared-secret
+JWT_EXPIRES_IN=7d
+REDIS_HOST=localhost
+REDIS_PORT=6379
+KAFKA_BROKERS=localhost:9092
+```
+
+**Spécifiques** :
+```env
+# Auth / User
+CORS_ORIGIN=http://localhost:5173
+CLIENT_URL=http://localhost:5173
+
+# Voyage
+AMADEUS_API_KEY=xxx
+AMADEUS_API_SECRET=xxx
+
+# AI
+OPENAI_API_KEY=sk-xxx
+
+# Payment
+STRIPE_SECRET_KEY=sk_test_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
+FRONTEND_URL=http://localhost:5173
+```
+
+## Architecture Big Pods (production)
+
+En production, les 5 services sont regroupés en 2 pods via Supervisor + NGINX :
+
+```
+Core Pod      → Auth (3001) + User (3002) + NGINX (:80)
+Business Pod  → Voyage (3003) + AI (3005) + Payment (3004) + NGINX (:80)
+```
+
+Voir `dreamscape-infra/` pour les Dockerfiles et scripts de lancement.
+
+## Sécurité
+
+- JWT avec refresh tokens (accès 7j, refresh configurable)
+- RBAC (Role-Based Access Control) — User Service
+- Rate limiting Redis sur chaque service
+- Helmet (CSP, HSTS, XSS protection)
+- Input validation & sanitisation
+- Audit logging GDPR (User Service)
+
+## Contributing
+
+1. Branch : `feature/<service>/<description>`
+2. Conventional commits (`feat(auth):`, `fix(voyage):`)
+3. Tests requis (coverage > 70%)
+4. PR avec passage de tous les tests CI
+
+---
+
+*Propriétaire et confidentiel © DreamScape 2025*
