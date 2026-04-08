@@ -4,6 +4,7 @@ import { AuthService } from '@services/AuthService';
 import { authenticateToken, authenticateRefreshToken, AuthRequest } from '@middleware/auth';
 import { loginLimiter, registerLimiter, refreshLimiter } from '@middleware/rateLimiter';
 import authKafkaService from '@services/KafkaService';
+import * as PasswordResetService from '@services/PasswordResetService';
 
 const router = express.Router();
 
@@ -470,5 +471,49 @@ router.post('/test/cleanup', async (req, res) => {
   const result = await AuthService.resetTestData();
   res.status(200).json(result);
 });
+
+// POST /api/v1/auth/forgot-password
+router.post(
+  '/forgot-password',
+  conditionalRateLimit(loginLimiter),
+  [body('email').isEmail().normalizeEmail().withMessage('Please provide a valid email address')],
+  async (req: express.Request, res: express.Response) => {
+    if (handleValidationErrors(req, res)) return;
+    try {
+      const result = await PasswordResetService.requestPasswordReset(req.body.email);
+      res.json(result);
+    } catch (error) {
+      console.error('Forgot password route error:', error);
+      res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+  }
+);
+
+// PUT /api/v1/auth/reset-password
+router.put(
+  '/reset-password',
+  [
+    body('token').notEmpty().withMessage('Token is required'),
+    body('newPassword')
+      .isLength({ min: 8 })
+      .withMessage('Password must be at least 8 characters long')
+      .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
+      .withMessage('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'),
+  ],
+  async (req: express.Request, res: express.Response) => {
+    if (handleValidationErrors(req, res)) return;
+    try {
+      const result = await PasswordResetService.resetPassword(req.body.token, req.body.newPassword);
+      res.json(result);
+    } catch (error: any) {
+      if (error.message === 'Invalid or expired token') {
+        res.status(400).json({ success: false, message: error.message });
+        return;
+      }
+      console.error('Reset password route error:', error);
+      res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+  }
+);
 
 export default router;
