@@ -19,7 +19,7 @@ import { ColdStartService } from '../recommendations/cold-start.service';
 import { EnrichedUserVector } from '../segments/segment-to-vector.service';
 
 // Configuration
-const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3001';
+const USER_SERVICE_URL = process.env.VITE_USER_SERVICE_URL || 'http://localhost:3002';
 
 interface OnboardingResult {
   success: boolean;

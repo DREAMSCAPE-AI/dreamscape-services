@@ -41,7 +41,7 @@ import {
 } from '../types/flight-vector.types';
 
 // Configuration
-const VOYAGE_SERVICE_URL = process.env.VOYAGE_SERVICE_URL || 'http://localhost:3003';
+const VOYAGE_SERVICE_URL = process.env.VITE_VOYAGE_SERVICE_URL || 'http://localhost:3003';
 const REDIS_CLIENT = null; // TODO: Initialize Redis client
 
 /**

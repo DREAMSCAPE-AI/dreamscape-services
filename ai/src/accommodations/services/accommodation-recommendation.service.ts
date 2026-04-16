@@ -47,8 +47,8 @@ import {
 import { parseCityNamesToIATA, isValidIATACode } from '../../shared/utils/city-iata-mapper';
 
 // Configuration
-const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3001';
-const VOYAGE_SERVICE_URL = process.env.VOYAGE_SERVICE_URL || 'http://localhost:3003';
+const USER_SERVICE_URL = process.env.VITE_USER_SERVICE_URL || 'http://localhost:3002';
+const VOYAGE_SERVICE_URL = process.env.VITE_VOYAGE_SERVICE_URL || 'http://localhost:3003';
 
 /**
  * Performance metrics tracker
