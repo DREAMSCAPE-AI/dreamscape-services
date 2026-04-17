@@ -22,11 +22,10 @@ type BookingStatus = 'DRAFT' | 'PENDING_PAYMENT' | 'PENDING' | 'CONFIRMED' | 'CA
  * - Confirms booking status
  * - Clears user's cart
  */
-export const handlePaymentCompleted: MessageHandler<PaymentCompletedPayload> = async ({
-  event,
-  message,
-}) => {
-  const { paymentId, bookingId, userId, amount, currency, method, metadata, completedAt } = event.payload;
+export const handlePaymentCompleted: MessageHandler<PaymentCompletedPayload> = async (
+  event
+) => {
+  const { paymentId, bookingId, userId, amount, currency, completedAt } = event.payload;
 
   console.log(`[Voyage] Payment completed: ${paymentId} for booking ${bookingId}`);
 
@@ -42,14 +41,11 @@ export const handlePaymentCompleted: MessageHandler<PaymentCompletedPayload> = a
         {
           bookingId: updatedBooking.reference,
           userId: updatedBooking.userId,
-          bookingType: updatedBooking.type,
-          status: 'confirmed',
-          totalAmount: Number(updatedBooking.totalAmount),
-          currency: updatedBooking.currency,
+          confirmationNumber: updatedBooking.reference,
           paymentId,
           confirmedAt: updatedBooking.confirmedAt?.toISOString() || new Date().toISOString(),
         },
-        event.metadata?.correlationId
+        event.metadata?.correlationId as string | undefined
       );
       console.log(`📤 [Voyage] Published booking.confirmed event for ${bookingId}`);
     } catch (publishError) {
@@ -68,10 +64,9 @@ export const handlePaymentCompleted: MessageHandler<PaymentCompletedPayload> = a
  * Marks booking as FAILED after payment failure (DR-394 + DR-505)
  * Note: Cart is NOT cleared - user can retry payment
  */
-export const handlePaymentFailed: MessageHandler<PaymentFailedPayload> = async ({
-  event,
-  message,
-}) => {
+export const handlePaymentFailed: MessageHandler<PaymentFailedPayload> = async (
+  event
+) => {
   const { paymentId, bookingId, userId, errorCode, errorMessage, failedAt } = event.payload;
 
   console.log(`[Voyage] Payment failed: ${paymentId} for booking ${bookingId} - ${errorMessage}`);
@@ -92,7 +87,7 @@ export const handlePaymentFailed: MessageHandler<PaymentFailedPayload> = async (
           reason,
           cancelledAt: updatedBooking.updatedAt.toISOString(),
         },
-        event.metadata?.correlationId
+        event.metadata?.correlationId as string | undefined
       );
       console.log(`📤 [Voyage] Published booking.cancelled event for ${bookingId}`);
     } catch (publishError) {

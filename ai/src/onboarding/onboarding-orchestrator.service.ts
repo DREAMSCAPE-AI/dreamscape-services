@@ -19,7 +19,7 @@ import { ColdStartService } from '../recommendations/cold-start.service';
 import { EnrichedUserVector } from '../segments/segment-to-vector.service';
 
 // Configuration
-const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3001';
+const USER_SERVICE_URL = process.env.VITE_USER_SERVICE_URL || 'http://localhost:3002';
 
 interface OnboardingResult {
   success: boolean;
@@ -69,10 +69,11 @@ export class OnboardingOrchestratorService {
     console.log('='.repeat(80));
 
     const startTime = Date.now();
+    let aiPreferences: any;
 
     try {
       // Step 1: Fetch AI preferences (if not provided)
-      let aiPreferences = onboardingData;
+      aiPreferences = onboardingData;
       if (!aiPreferences) {
         console.log('[Step 1/6] Fetching user preferences...');
         aiPreferences = await this.fetchUserPreferences(userId);
@@ -233,7 +234,7 @@ export class OnboardingOrchestratorService {
         where: { userId },
         data: {
           vector: updatedVector,
-          segments: updatedSegments,
+          segments: updatedSegments as any,
           usageCount: currentVector.usageCount + 1,
           lastUsedAt: new Date(),
           updatedAt: new Date(),
@@ -331,7 +332,7 @@ export class OnboardingOrchestratorService {
       const recommendations = await this.coldStartService.getRecommendationsForNewUser(
         userId,
         profile,
-        { strategy: 'POPULARITY_ONLY', limit: 10 }
+        { strategy: 'POPULARITY_ONLY' as any, limit: 10 }
       );
 
       return {

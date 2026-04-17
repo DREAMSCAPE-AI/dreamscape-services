@@ -324,7 +324,7 @@ export class AnalyticsService {
             gte: dateRange.from,
             lte: dateRange.to,
           },
-          status: 'BOOKED',
+          status: 'BOOKED' as RecommendationStatus,
         }
       : { status: 'BOOKED' as RecommendationStatus };
 

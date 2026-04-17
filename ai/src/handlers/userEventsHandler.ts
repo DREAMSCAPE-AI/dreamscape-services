@@ -13,10 +13,10 @@ import {
  * Handle user preferences updated event
  * Updates ML model with new preferences for personalized recommendations
  */
-export const handleUserPreferencesUpdated: MessageHandler<UserPreferencesUpdatedPayload> = async ({
+export const handleUserPreferencesUpdated: MessageHandler<UserPreferencesUpdatedPayload> = async (
   event,
-  message,
-}) => {
+  metadata
+) => {
   const { userId, preferences, updatedAt } = event.payload;
 
   console.log(`[AI] User ${userId} preferences updated at ${updatedAt}`);
@@ -51,10 +51,10 @@ export const handleUserPreferencesUpdated: MessageHandler<UserPreferencesUpdated
  * Handle user profile updated event
  * Updates user segmentation based on demographic data
  */
-export const handleUserProfileUpdated: MessageHandler<UserProfileUpdatedPayload> = async ({
+export const handleUserProfileUpdated: MessageHandler<UserProfileUpdatedPayload> = async (
   event,
-  message,
-}) => {
+  metadata
+) => {
   const { userId, profile, updatedAt } = event.payload;
 
   console.log(`[AI] User ${userId} profile updated at ${updatedAt}`);

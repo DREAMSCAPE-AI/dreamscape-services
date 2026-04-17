@@ -81,8 +81,8 @@ export interface ScoringConfig {
   mlHybridWeight: number;         // default: 0.7 (70% ML, 30% rules)
 
   // Filters
-  minSimilarityThreshold: number; // default: 0.3
-  minQualityScore: number;        // default: 0.4
+  minSimilarityThreshold: number; // default: 0.2 (aligned with flights)
+  minQualityScore: number;        // default: 0.15 (lenient for hotels without ratings)
 }
 
 /**
@@ -111,8 +111,8 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfig = {
   diversityConfig: DEFAULT_DIVERSITY_CONFIG,
   useMLModel: false, // Default: rule-based only (enable via A/B test)
   mlHybridWeight: 0.7, // 70% ML + 30% rules when useMLModel=true
-  minSimilarityThreshold: 0.3,
-  minQualityScore: 0.4,
+  minSimilarityThreshold: 0.2, // Aligned with flight scoring for consistency
+  minQualityScore: 0.15, // Lowered from 0.2 to allow hotels without detailed ratings
 };
 
 /**
@@ -128,6 +128,7 @@ interface HotelWithVector {
     qualityScore: number;
     segmentBoost: number;
     finalScore: number;
+    mlScore?: number; // Optional ML-based score (US-IA-009)
   };
 }
 
@@ -165,6 +166,13 @@ export class AccommodationScoringService {
     userHistory?: { viewedCountries: Set<string>; viewedCities: Set<string> },
     userId?: string // Required for ML mode
   ): Promise<ScoredAccommodation[]> {
+    console.log(`[Scoring] UserVector received:`, {
+      length: userVector?.length,
+      values: userVector,
+      hasNaN: userVector?.some(v => isNaN(v)),
+      segment: userSegment
+    });
+
     // US-IA-013: ML-based scoring (if enabled)
     if (this.config.useMLModel && userId) {
       try {
@@ -191,6 +199,7 @@ export class AccommodationScoringService {
 
         // Apply filters
         if (similarity < this.config.minSimilarityThreshold) {
+          console.log(`[Scoring] Hotel ${features.hotelId} filtered by similarity: ${similarity.toFixed(3)} < ${this.config.minSimilarityThreshold}`);
           continue; // Skip poor matches
         }
 
@@ -198,6 +207,7 @@ export class AccommodationScoringService {
         const quality = this.calculateQualityScore(features);
 
         if (quality < this.config.minQualityScore) {
+          console.log(`[Scoring] Hotel ${features.hotelId} filtered by quality: ${quality.toFixed(3)} < ${this.config.minQualityScore} (starRating: ${features.starRating}, hasRatings: ${!!features.ratings})`);
           continue; // Skip low quality
         }
 
@@ -212,15 +222,27 @@ export class AccommodationScoringService {
           ? this.getSegmentBoost(userSegment, features.category)
           : 1.0;
 
-        const baseScoreWithSegment = baseScore * segmentBoost;
+        const baseScoreWithSegment = Math.min(1.0, baseScore * segmentBoost); // cap so novelty weight always has effect (US-IA-011)
 
         // Apply novelty bonus (US-IA-011 - Encourages exploration)
         const noveltyWeight = this.config.diversityConfig.noveltyWeight;
         const noveltyBonus = this.calculateNoveltyScore(features, userHistory);
-        const finalScore = Math.min(
+        let finalScore = Math.min(
           1.0,
           baseScoreWithSegment * (1 - noveltyWeight) + noveltyBonus * noveltyWeight
         );
+
+        // Safety check: if finalScore is NaN, use baseScore
+        if (isNaN(finalScore)) {
+          console.warn(`[Scoring] NaN finalScore for hotel ${features.hotelId}, using baseScore instead`);
+          finalScore = baseScore;
+        }
+
+        // Final safety: ensure score is valid
+        if (isNaN(finalScore) || finalScore < 0) {
+          console.warn(`[Scoring] Invalid finalScore ${finalScore} for hotel ${features.hotelId}, skipping`);
+          continue;
+        }
 
         scoredHotels.push({
           hotel: features,
@@ -240,19 +262,31 @@ export class AccommodationScoringService {
       }
     }
 
+    console.log(`[Scoring] Scored ${scoredHotels.length} hotels out of ${hotels.length} total (${hotels.length - scoredHotels.length} filtered)`);
+
     // Step 2: Sort by score (descending)
     scoredHotels.sort((a, b) => b.score - a.score);
 
-    // Step 3: Apply diversification (MMR)
+    // Step 3: Apply diversification (MMR) with larger pool if diversity is enabled
+    // Give MMR more candidates so enforceDestinationDiversity has enough to work with
+    const mmrLimit = this.config.diversityConfig.enableDestinationPenalty
+      ? Math.min(limit * 3, scoredHotels.length) // 3x pool for diversity
+      : limit;
+
+    console.log(`[MMR] Before MMR: ${scoredHotels.length} hotels, mmrLimit: ${mmrLimit}, applyDiversification: ${this.config.applyDiversification}`);
+
     let diversifiedHotels = this.config.applyDiversification
-      ? this.applyMMR(scoredHotels, userVector, limit)
-      : scoredHotels.slice(0, limit);
+      ? this.applyMMR(scoredHotels, userVector, mmrLimit)
+      : scoredHotels.slice(0, mmrLimit);
+
+    console.log(`[MMR] After MMR: ${diversifiedHotels.length} hotels`);
 
     // Step 3.5: Enforce destination diversity constraints (US-IA-011)
     let diversityMetrics: DiversityMetrics | undefined;
     if (this.config.diversityConfig.enableDestinationPenalty) {
       const { results, metrics } = this.enforceDestinationDiversity(diversifiedHotels);
-      diversifiedHotels = results;
+      // Take only the requested limit after diversity enforcement
+      diversifiedHotels = results.slice(0, limit);
       diversityMetrics = metrics;
 
       // Log diversity metrics
@@ -433,7 +467,14 @@ export class AccommodationScoringService {
    */
   private calculateCosineSimilarity(vec1: number[], vec2: number[]): number {
     if (vec1.length !== vec2.length) {
-      throw new Error('Vectors must have same dimension');
+      console.warn('[Scoring] Vector dimension mismatch:', vec1.length, 'vs', vec2.length);
+      return 0;
+    }
+
+    // Check for NaN in vectors
+    if (vec1.some(v => isNaN(v)) || vec2.some(v => isNaN(v))) {
+      console.warn('[Scoring] NaN detected in vectors');
+      return 0;
     }
 
     let dotProduct = 0;
@@ -450,11 +491,18 @@ export class AccommodationScoringService {
     const norm2Sqrt = Math.sqrt(norm2);
 
     // Prevent division by zero
-    if (norm1Sqrt === 0 || norm2Sqrt === 0) {
+    if (norm1Sqrt === 0 || norm2Sqrt === 0 || isNaN(norm1Sqrt) || isNaN(norm2Sqrt)) {
+      console.warn('[Scoring] Zero or NaN norm detected:', { norm1Sqrt, norm2Sqrt });
       return 0;
     }
 
     const similarity = dotProduct / (norm1Sqrt * norm2Sqrt);
+
+    // Check for NaN result
+    if (isNaN(similarity)) {
+      console.warn('[Scoring] NaN similarity result');
+      return 0;
+    }
 
     // Clamp to [0, 1] (handle numerical errors)
     return Math.max(0, Math.min(1, similarity));
@@ -531,11 +579,24 @@ export class AccommodationScoringService {
     if (!hotel.ratings?.cleanliness && !hotel.ratings?.service && !hotel.ratings?.facilities) {
       if (hotel.starRating && hotel.ratings?.overall) {
         const starScore = (hotel.starRating - 1) / 4;
-        const ratingScore = (hotel.ratings.overall - 5) / 5;
+        // Normalize overall rating: assume 0-10 scale, but handle 0-5 scale gracefully
+        const maxRating = hotel.ratings.overall > 5 ? 10 : 5;
+        const ratingScore = Math.max(0, hotel.ratings.overall / maxRating);
         score = 0.6 * starScore + 0.4 * ratingScore;
       } else if (hotel.starRating) {
         score = (hotel.starRating - 1) / 4;
+      } else if (hotel.ratings?.overall) {
+        // Hotel has overall rating but no starRating — use as quality proxy
+        const maxRating = hotel.ratings.overall > 5 ? 10 : 5;
+        score = Math.max(0, hotel.ratings.overall / maxRating);
       }
+    }
+
+    // Final fallback: If no quality data at all, assign neutral score (0.5)
+    // This allows hotels without ratings to pass the quality filter while being
+    // ranked lower than hotels with actual quality data
+    if (score === 0 && !hotel.starRating && !hotel.ratings) {
+      score = 0.5;
     }
 
     return Math.max(0, Math.min(1.0, score));
@@ -560,8 +621,10 @@ export class AccommodationScoringService {
 
   /**
    * Apply Maximum Marginal Relevance for diversification (Enhanced - US-IA-011)
+   * Apply Maximum Marginal Relevance for diversification (Enhanced - US-IA-011)
    *
    * Greedy algorithm that selects hotels balancing relevance and diversity.
+   * Enhanced version includes destination-level diversity penalty.
    * Enhanced version includes destination-level diversity penalty.
    *
    * @param hotels - Sorted hotels by score
@@ -579,6 +642,8 @@ export class AccommodationScoringService {
     const selected: HotelWithVector[] = [];
     const remaining = [...hotels];
 
+    console.log(`[MMR] Starting MMR with ${hotels.length} hotels, limit: ${limit}, lambda: ${lambda}`);
+
     // Track selected countries and cities for destination-level diversity
     const selectedCountries = new Set<string>();
     const selectedCities = new Set<string>();
@@ -588,6 +653,8 @@ export class AccommodationScoringService {
     while (selected.length < limit && remaining.length > 0) {
       let bestIndex = -1;
       let bestMMRScore = -Infinity;
+
+      console.log(`[MMR] Iteration ${selected.length + 1}: checking ${remaining.length} remaining hotels`);
 
       for (let i = 0; i < remaining.length; i++) {
         const candidate = remaining[i];
@@ -645,11 +712,17 @@ export class AccommodationScoringService {
         // Enhanced MMR score
         const mmrScore = lambda * relevance - (1 - lambda) * diversityPenalty;
 
+        if (i === 0) {
+          console.log(`[MMR] First candidate: hotelId=${candidate.hotel.hotelId}, relevance=${relevance}, diversityPenalty=${diversityPenalty}, mmrScore=${mmrScore}, bestMMRScore=${bestMMRScore}`);
+        }
+
         if (mmrScore > bestMMRScore) {
           bestMMRScore = mmrScore;
           bestIndex = i;
         }
       }
+
+      console.log(`[MMR] After checking all candidates: bestIndex=${bestIndex}, bestMMRScore=${bestMMRScore}`);
 
       if (bestIndex >= 0) {
         const selectedHotel = remaining[bestIndex];
@@ -727,43 +800,92 @@ export class AccommodationScoringService {
   private enforceDestinationDiversity(
     hotels: HotelWithVector[]
   ): { results: HotelWithVector[]; metrics: DiversityMetrics } {
+    console.log(`[Diversity] Input: ${hotels.length} hotels`);
+
     const diversityConfig = this.config.diversityConfig;
     const countryCount = new Map<string, number>();
     const cityCount = new Map<string, number>();
     const filtered: HotelWithVector[] = [];
     const constraintViolations: string[] = [];
 
-    // Pass 1: Filter by maxSameCountry constraint
+    // Group hotels by country
+    const hotelsByCountry = new Map<string, HotelWithVector[]>();
     for (const hotel of hotels) {
       const country = hotel.hotel.location?.country || 'Unknown';
-      const city = hotel.hotel.location?.city || 'Unknown';
-      const currentCount = countryCount.get(country) || 0;
+      console.log(`[Diversity] Hotel ${hotel.hotel.hotelId}: country="${country}", city="${hotel.hotel.location?.city}"`);
+      if (!hotelsByCountry.has(country)) {
+        hotelsByCountry.set(country, []);
+      }
+      hotelsByCountry.get(country)!.push(hotel);
+    }
 
-      if (currentCount < diversityConfig.maxSameCountry) {
+    const availableCountries = Array.from(hotelsByCountry.keys());
+    const targetCountries = Math.max(diversityConfig.minCountries, availableCountries.length);
+
+    console.log(`[Diversity] Countries found: ${availableCountries.join(', ')}, targetCountries: ${targetCountries}, minCountries: ${diversityConfig.minCountries}`);
+
+    // Pass 1: Ensure minCountries by taking at least 1 hotel from each country
+    // (up to minCountries different countries)
+    const countriesUsed = new Set<string>();
+    for (const country of availableCountries) {
+      if (countriesUsed.size >= targetCountries) break;
+
+      const countryHotels = hotelsByCountry.get(country)!;
+      if (countryHotels.length > 0) {
+        const hotel = countryHotels.shift()!; // Take best hotel from this country
         filtered.push(hotel);
-        countryCount.set(country, currentCount + 1);
+        countriesUsed.add(country);
+        countryCount.set(country, 1);
 
+        const city = hotel.hotel.location?.city || 'Unknown';
         const cityKey = `${country}:${city}`;
         cityCount.set(cityKey, (cityCount.get(cityKey) || 0) + 1);
-      } else {
-        // Constraint violated, skip this hotel
+      }
+    }
+
+    console.log(`[Diversity] After Pass 1: ${filtered.length} hotels, ${countriesUsed.size} countries`);
+
+    // Pass 2: Fill remaining slots respecting maxSameCountry
+    for (const country of availableCountries) {
+      const countryHotels = hotelsByCountry.get(country)!;
+      const currentCount = countryCount.get(country) || 0;
+
+      // Add more hotels from this country up to maxSameCountry
+      while (countryHotels.length > 0 && (countryCount.get(country) || 0) < diversityConfig.maxSameCountry) {
+        const hotel = countryHotels.shift()!;
+        filtered.push(hotel);
+        countryCount.set(country, (countryCount.get(country) || 0) + 1);
+
+        const city = hotel.hotel.location?.city || 'Unknown';
+        const cityKey = `${country}:${city}`;
+        cityCount.set(cityKey, (cityCount.get(cityKey) || 0) + 1);
+      }
+
+      // Log violations if we had to skip hotels
+      if (countryHotels.length > 0) {
         constraintViolations.push(
-          `Skipped hotel in ${country} (quota ${diversityConfig.maxSameCountry} reached)`
+          `Skipped ${countryHotels.length} hotels in ${country} (quota ${diversityConfig.maxSameCountry} reached)`
         );
       }
     }
 
-    // Pass 2: Check minCountries constraint
+    console.log(`[Diversity] After Pass 2: ${filtered.length} hotels, ${countryCount.size} countries`);
+
+    // Pass 3: Check if we met minCountries
     const uniqueCountries = countryCount.size;
-    if (uniqueCountries < diversityConfig.minCountries && filtered.length < hotels.length) {
+    if (uniqueCountries < diversityConfig.minCountries) {
       constraintViolations.push(
-        `Only ${uniqueCountries} countries (minimum: ${diversityConfig.minCountries})`
+        `Only ${uniqueCountries} countries available (minimum: ${diversityConfig.minCountries})`
       );
     }
 
     // Calculate diversity metrics
-    const maxCountOccurrences = Math.max(...Array.from(countryCount.values()));
-    const diversityScore = uniqueCountries / filtered.length; // 0-1, higher = more diverse
+    const maxCountOccurrences = filtered.length > 0
+      ? Math.max(...Array.from(countryCount.values()))
+      : 0;
+    const diversityScore = filtered.length > 0
+      ? uniqueCountries / filtered.length
+      : 0;
 
     const metrics: DiversityMetrics = {
       uniqueCountries,

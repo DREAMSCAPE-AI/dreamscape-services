@@ -311,11 +311,8 @@ export class PopularityService {
     const recentBookings = 10; // Last 30 days
     const previousBookings = 8; // Previous 30 days
 
-    const growthRate = previousBookings > 0 ? ((recentBookings - previousBookings) / previousBookings) * 100 : 0;
-
-    let direction: 'rising' | 'stable' | 'declining' = 'stable';
-    if (growthRate > 10) direction = 'rising';
-    if (growthRate < -10) direction = 'declining';
+    const growthRate = this.calculateGrowthRate(recentBookings, previousBookings);
+    const direction = this.determineTrendDirection(growthRate);
 
     return {
       destinationId,
@@ -325,5 +322,17 @@ export class PopularityService {
       previousBookings,
       analyzedAt: new Date(),
     };
+  }
+
+  private calculateGrowthRate(recentBookings: number, previousBookings: number): number {
+    return previousBookings > 0
+      ? ((recentBookings - previousBookings) / previousBookings) * 100
+      : 0;
+  }
+
+  private determineTrendDirection(growthRate: number): 'rising' | 'stable' | 'declining' {
+    if (growthRate > 10) return 'rising';
+    if (growthRate < -10) return 'declining';
+    return 'stable';
   }
 }

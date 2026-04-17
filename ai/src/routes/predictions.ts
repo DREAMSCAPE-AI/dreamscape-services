@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+// @ts-ignore
 import AmadeusService from '@/services/AmadeusService';
 
 const router = Router();

@@ -118,9 +118,30 @@ class RecommendationModel:
         return [(self.item_ids[i], float(scores[i])) for i in top_indices]
 
     def save(self, version: str = "v1.0") -> Path:
-        """Sauvegarde le modèle sur disque (format joblib)."""
+        """
+        Sauvegarde le modèle sur disque (format joblib).
+
+        Sauvegarde un dictionnaire avec les composants essentiels pour le serving,
+        compatible avec model_manager.py qui attend {user_factors, item_factors, user_ids, item_ids}.
+        """
         path = MODELS_DIR / f"recommendation_model_{version}.pkl"
-        joblib.dump(self, path)
+
+        # Format dict pour compatibilité avec model_manager.py
+        model_data = {
+            'user_factors': self.user_factors,
+            'item_factors': self.item_factors,
+            'user_ids': list(self.user_index.keys()),
+            'item_ids': self.item_ids,
+            'user_index': self.user_index,
+            'item_index': self.item_index,
+            'n_users': len(self.user_index),
+            'n_items': len(self.item_index),
+            'n_factors': self.n_factors,
+            'model_type': 'SVD',
+            'version': version,
+        }
+
+        joblib.dump(model_data, path)
         logger.info(f"Modèle sauvegardé : {path}")
         return path
 

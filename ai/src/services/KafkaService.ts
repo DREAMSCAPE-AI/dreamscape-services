@@ -222,7 +222,7 @@ class AIKafkaService {
     }
 
     if (subscriptions.length > 0) {
-      await this.client.subscribe(CONSUMER_GROUPS.AI_SERVICE, subscriptions);
+      await this.client.subscribe(CONSUMER_GROUPS.AI_SERVICE, subscriptions as any);
       console.log('[AIKafkaService] Subscribed to voyage and user events');
     }
   }

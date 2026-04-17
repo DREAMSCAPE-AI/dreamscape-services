@@ -1,0 +1,237 @@
+import { prisma } from '@dreamscape/db';
+import { Prisma } from '@prisma/client';
+
+interface Period {
+  startDate: Date;
+  endDate: Date;
+  previousStartDate: Date;
+  previousEndDate: Date;
+}
+
+export function parsePeriod(period: string, startDate?: string, endDate?: string): Period {
+  const now = new Date();
+  let start: Date;
+  let end: Date = now;
+
+  switch (period) {
+    case '24h':
+      start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      break;
+    case '7d':
+      start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      break;
+    case '30d':
+      start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      break;
+    case 'custom':
+      if (!startDate || !endDate) throw new Error('startDate and endDate required for custom period');
+      start = new Date(startDate);
+      end = new Date(endDate);
+      break;
+    default:
+      start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  }
+
+  const duration = end.getTime() - start.getTime();
+  const previousEnd = new Date(start.getTime());
+  const previousStart = new Date(start.getTime() - duration);
+
+  return { startDate: start, endDate: end, previousStartDate: previousStart, previousEndDate: previousEnd };
+}
+
+export async function getStats(period: Period) {
+  const { startDate, endDate, previousStartDate, previousEndDate } = period;
+
+  // Users
+  const [totalUsers, activeUsers, newUsers, previousNewUsers] = await Promise.all([
+    prisma.user.count(),
+    prisma.user.count({ where: { isVerified: true } }),
+    prisma.user.count({ where: { createdAt: { gte: startDate, lte: endDate } } }),
+    prisma.user.count({ where: { createdAt: { gte: previousStartDate, lte: previousEndDate } } }),
+  ]);
+
+  // Bookings
+  const bookingWhere = { createdAt: { gte: startDate, lte: endDate } };
+  const previousBookingWhere = { createdAt: { gte: previousStartDate, lte: previousEndDate } };
+
+  const [totalBookings, previousTotalBookings, bookingsByStatus] = await Promise.all([
+    prisma.bookingData.count({ where: bookingWhere }),
+    prisma.bookingData.count({ where: previousBookingWhere }),
+    prisma.bookingData.groupBy({
+      by: ['status'],
+      where: bookingWhere,
+      _count: { id: true },
+    }),
+  ]);
+
+  // Revenue
+  const [revenueResult, previousRevenueResult] = await Promise.all([
+    prisma.paymentTransaction.aggregate({
+      where: { status: 'SUCCEEDED', createdAt: { gte: startDate, lte: endDate } },
+      _sum: { amount: true },
+    }),
+    prisma.paymentTransaction.aggregate({
+      where: { status: 'SUCCEEDED', createdAt: { gte: previousStartDate, lte: previousEndDate } },
+      _sum: { amount: true },
+    }),
+  ]);
+
+  const revenue = Number(revenueResult._sum.amount || 0);
+  const previousRevenue = Number(previousRevenueResult._sum.amount || 0);
+
+  // Conversion rate: searches vs confirmed bookings
+  const [searchCount, confirmedBookings] = await Promise.all([
+    prisma.searchHistory.count({ where: { searchedAt: { gte: startDate, lte: endDate } } }),
+    prisma.bookingData.count({
+      where: {
+        ...bookingWhere,
+        status: { in: ['CONFIRMED', 'COMPLETED'] },
+      },
+    }),
+  ]);
+
+  const [previousSearchCount, previousConfirmedBookings] = await Promise.all([
+    prisma.searchHistory.count({ where: { searchedAt: { gte: previousStartDate, lte: previousEndDate } } }),
+    prisma.bookingData.count({
+      where: {
+        ...previousBookingWhere,
+        status: { in: ['CONFIRMED', 'COMPLETED'] },
+      },
+    }),
+  ]);
+
+  const conversionRate = searchCount > 0 ? (confirmedBookings / searchCount) * 100 : 0;
+  const previousConversionRate = previousSearchCount > 0 ? (previousConfirmedBookings / previousSearchCount) * 100 : 0;
+
+  const avgBookingValue = totalBookings > 0 ? revenue / totalBookings : 0;
+
+  const evolution = (current: number, previous: number) =>
+    previous > 0 ? Math.round(((current - previous) / previous) * 100) : current > 0 ? 100 : 0;
+
+  return {
+    users: {
+      total: totalUsers,
+      active: activeUsers,
+      inactive: totalUsers - activeUsers,
+      newInPeriod: newUsers,
+      evolution: evolution(newUsers, previousNewUsers),
+    },
+    bookings: {
+      total: totalBookings,
+      byStatus: Object.fromEntries(bookingsByStatus.map(b => [b.status, b._count.id])),
+      evolution: evolution(totalBookings, previousTotalBookings),
+    },
+    revenue: {
+      total: revenue,
+      currency: 'EUR',
+      evolution: evolution(revenue, previousRevenue),
+    },
+    conversionRate: {
+      rate: Math.round(conversionRate * 100) / 100,
+      evolution: Math.round((conversionRate - previousConversionRate) * 100) / 100,
+    },
+    avgBookingValue: {
+      amount: Math.round(avgBookingValue * 100) / 100,
+      currency: 'EUR',
+    },
+  };
+}
+
+export async function getRevenueChart(period: Period) {
+  const { startDate, endDate } = period;
+
+  const result = await prisma.$queryRaw<Array<{ date: Date; revenue: number }>>`
+    SELECT
+      date_trunc('day', "createdAt") as date,
+      COALESCE(SUM(amount), 0)::float as revenue
+    FROM payment_transactions
+    WHERE status = 'SUCCEEDED'
+      AND "createdAt" >= ${startDate}
+      AND "createdAt" <= ${endDate}
+    GROUP BY date_trunc('day', "createdAt")
+    ORDER BY date
+  `;
+
+  return result.map(r => ({
+    date: r.date.toISOString().split('T')[0],
+    revenue: r.revenue,
+  }));
+}
+
+function extractDestination(type: string, data: any): string {
+  if (!data) return 'Inconnu';
+  switch (type) {
+    case 'FLIGHT':
+    case 'TRANSFER':
+      return data.to || data.destination || data.cityCode || 'Inconnu';
+    case 'HOTEL':
+      return data.city || data.destination || data.hotel || data.cityCode || 'Inconnu';
+    case 'ACTIVITY':
+      return data.city || data.destination || data.location || data.activity || 'Inconnu';
+    case 'PACKAGE':
+      return data.destination || data.city || data.cityCode || 'Inconnu';
+    default:
+      return data.destination || data.city || data.cityCode || data.to || 'Inconnu';
+  }
+}
+
+export async function getBookingsByDestination(limit: number = 5, period?: Period) {
+  const where: any = {
+    status: { in: ['CONFIRMED', 'COMPLETED', 'PENDING', 'PENDING_PAYMENT'] },
+  };
+  if (period) {
+    where.createdAt = { gte: period.startDate, lte: period.endDate };
+  }
+
+  const bookings = await prisma.bookingData.findMany({
+    where,
+    select: { type: true, data: true },
+  });
+
+  const destinationCounts: Record<string, number> = {};
+  for (const booking of bookings) {
+    const destination = extractDestination(booking.type, booking.data as any);
+    destinationCounts[destination] = (destinationCounts[destination] || 0) + 1;
+  }
+
+  return Object.entries(destinationCounts)
+    .filter(([dest]) => dest !== 'Inconnu')
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, limit)
+    .map(([destination, count]) => ({ destination, count }));
+}
+
+export async function getRecentTransactions(limit: number = 10, period?: Period) {
+  const where: any = {};
+  if (period) {
+    where.createdAt = { gte: period.startDate, lte: period.endDate };
+  }
+
+  const transactions = await prisma.paymentTransaction.findMany({
+    where,
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+  });
+
+  const userIds = [...new Set(transactions.map(t => t.userId))];
+  const users = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, email: true, firstName: true, lastName: true },
+  });
+  const userMap = new Map(users.map(u => [u.id, u]));
+
+  return transactions.map(t => {
+    const user = userMap.get(t.userId);
+    return {
+      id: t.id,
+      userEmail: user?.email || 'Unknown',
+      userName: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email : 'Unknown',
+      amount: Number(t.amount),
+      currency: t.currency,
+      status: t.status,
+      paymentMethod: t.paymentMethod,
+      bookingReference: t.bookingReference,
+      createdAt: t.createdAt.toISOString(),
+    };
+  });
+}

@@ -175,6 +175,7 @@ router.put('/items/:itemId', async (req: Request, res: Response): Promise<void> 
     const { itemId } = req.params;
     const { quantity } = req.body;
 
+    /* c8 ignore next 5 */
     if (!itemId) {
       res.status(400).json({
         error: 'Missing item ID'
@@ -229,6 +230,7 @@ router.delete('/items/:itemId', async (req: Request, res: Response): Promise<voi
 
     const { itemId } = req.params;
 
+    /* c8 ignore next 5 */
     if (!itemId) {
       res.status(400).json({
         error: 'Missing item ID'

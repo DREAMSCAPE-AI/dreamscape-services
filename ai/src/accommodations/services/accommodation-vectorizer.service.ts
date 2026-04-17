@@ -45,6 +45,41 @@ import {
 } from '../utils/amenity-parser.util';
 
 /**
+ * Mapping of IATA city codes to country codes for fallback when Amadeus doesn't provide countryCode
+ */
+const CITY_TO_COUNTRY_MAP: Record<string, string> = {
+  NYC: 'US', LAX: 'US', MIA: 'US', CHI: 'US', SFO: 'US', LAS: 'US', SEA: 'US', BOS: 'US', WAS: 'US',
+  LON: 'GB', PAR: 'FR', BCN: 'ES', ROM: 'IT', BER: 'DE', AMS: 'NL', VIE: 'AT', PRG: 'CZ', DUB: 'IE',
+  IST: 'TR', ATH: 'GR', LIS: 'PT', MAD: 'ES', MIL: 'IT', VEN: 'IT', FLR: 'IT', NAP: 'IT',
+  TOK: 'JP', KYO: 'JP', OSA: 'JP', SEL: 'KR', BKK: 'TH', SIN: 'SG', HKG: 'HK', SHA: 'CN', BEJ: 'CN',
+  SYD: 'AU', MEL: 'AU', AKL: 'NZ', DXB: 'AE', DOH: 'QA', JNB: 'ZA', CPT: 'ZA', CAI: 'EG',
+  MEX: 'MX', RIO: 'BR', SAO: 'BR', BUE: 'AR', BOG: 'CO', LIM: 'PE', SAN: 'CL',
+  DEL: 'IN', BOM: 'IN', BLR: 'IN', KTM: 'NP', COL: 'LK', MLE: 'MV',
+  MRA: 'MA', CAS: 'MA', NBO: 'KE', ADD: 'ET',
+};
+
+/**
+ * Get country code with fallback to city-based mapping
+ */
+function getCountryCodeWithFallback(
+  countryFromAmadeus: string | undefined,
+  cityCode: string | undefined
+): string {
+  // Priority 1: Use Amadeus provided country code
+  if (countryFromAmadeus) return countryFromAmadeus;
+
+  // Priority 2: Map from city code
+  if (cityCode && CITY_TO_COUNTRY_MAP[cityCode]) {
+    console.log(`[AccommodationVectorizer] Using country fallback for city ${cityCode} -> ${CITY_TO_COUNTRY_MAP[cityCode]}`);
+    return CITY_TO_COUNTRY_MAP[cityCode];
+  }
+
+  // Priority 3: Default to "Unknown"
+  console.warn(`[AccommodationVectorizer] No country code found for city ${cityCode}`);
+  return 'Unknown';
+}
+
+/**
  * AccommodationVectorizerService
  *
  * Core service for accommodation feature extraction and vectorization.
@@ -70,7 +105,7 @@ export class AccommodationVectorizerService {
   vectorize(features: AccommodationFeatures): AccommodationVector {
     const amenities = new Set(features.amenities);
 
-    return [
+    const vector: AccommodationVector = [
       this.calculateClimateDimension(amenities),
       this.calculateCultureNatureDimension(features),
       this.calculateBudgetDimension(features),
@@ -80,6 +115,23 @@ export class AccommodationVectorizerService {
       this.calculateGastronomyDimension(amenities),
       this.calculatePopularityDimension(features),
     ];
+
+    // Validate vector for NaN values
+    const hasNaN = vector.some(v => isNaN(v));
+    if (hasNaN) {
+      console.error(`[AccommodationVectorizer] NaN detected in vector for hotel ${features.hotelId}:`, {
+        vector,
+        price: features.price.amount,
+        starRating: features.starRating,
+        hasRatings: !!features.ratings,
+        amenitiesCount: features.amenities.length,
+      });
+
+      // Replace NaN values with neutral 0.5
+      return vector.map(v => isNaN(v) ? 0.5 : v) as AccommodationVector;
+    }
+
+    return vector;
   }
 
   /**
@@ -156,7 +208,7 @@ export class AccommodationVectorizerService {
    * @param cityCode - City code for context
    * @returns Structured accommodation features
    */
-  private transformAmadeusToFeatures(amadeusHotel: any, cityCode: string): AccommodationFeatures {
+  public transformAmadeusToFeatures(amadeusHotel: any, cityCode: string): AccommodationFeatures {
     const hotel = amadeusHotel.hotel || amadeusHotel;
     const offer = amadeusHotel.offers?.[0];
 
@@ -177,7 +229,12 @@ export class AccommodationVectorizerService {
       location: {
         latitude: hotel.latitude || hotel.geoCode?.latitude,
         longitude: hotel.longitude || hotel.geoCode?.longitude,
-        address: hotel.address?.lines?.join(', ') || hotel.address,
+        address: hotel.address?.lines?.join(', ') || (typeof hotel.address === 'string' ? hotel.address : '') || '',
+        city: hotel.address?.cityName || hotel.city,
+        country: getCountryCodeWithFallback(
+          hotel.address?.countryCode || hotel.countryCode,
+          cityCode
+        ),
         cityCode,
         locationType,
         distanceToCenter: hotel.distanceToCenter,
@@ -187,8 +244,16 @@ export class AccommodationVectorizerService {
       starRating: hotel.rating || hotel.stars,
 
       price: {
-        amount: parseFloat(offer?.price?.total || offer?.price?.base || hotel.price || 0),
-        currency: offer?.price?.currency || this.config.budget.currency,
+        amount: this.parseValidPrice(
+          offer?.price?.total?.amount ||
+          offer?.price?.total ||
+          offer?.price?.base?.amount ||
+          offer?.price?.base ||
+          hotel.price?.amount ||
+          hotel.price ||
+          0
+        ),
+        currency: offer?.price?.currency || hotel.price?.currency || this.config.budget.currency,
         perNight: true,
       },
 
@@ -211,6 +276,13 @@ export class AccommodationVectorizerService {
         hasSuites: hotel.rooms.some((r: any) => r.type?.includes('SUITE')),
         hasConnectingRooms: hotel.rooms.some((r: any) => r.connectingRooms),
       } : undefined,
+
+      media: hotel.media && hotel.media.length > 0
+        ? hotel.media.map((m: any) => ({
+            uri: m.uri,
+            category: m.category,
+          }))
+        : undefined,
 
       metadata: {
         isNewOpening: hotel.openingDate && this.isRecentDate(hotel.openingDate, 12),
@@ -256,7 +328,13 @@ export class AccommodationVectorizerService {
 
     // Normalize by sum of weights
     const maxScore = Object.values(weights).reduce((sum, w) => sum + w, 0);
-    return Math.min(1.0, score / maxScore);
+
+    if (maxScore === 0 || isNaN(maxScore)) {
+      return 0.5;
+    }
+
+    const result = Math.min(1.0, score / maxScore);
+    return isNaN(result) ? 0.5 : result;
   }
 
   /**
@@ -313,9 +391,16 @@ export class AccommodationVectorizerService {
     const { amount } = features.price;
     const marketAverage = this.config.budget.marketAveragePrice;
 
-    if (amount === 0 || !marketAverage) {
+    // Validate inputs
+    if (isNaN(amount) || isNaN(marketAverage)) {
+      console.warn(`[AccommodationVectorizer] NaN in budget calculation: amount=${amount}, marketAverage=${marketAverage}`);
+      return 0.5;
+    }
+
+    if (amount === 0 || !marketAverage || marketAverage === 0) {
       // Fallback to star rating
-      return features.starRating ? (features.starRating - 1) / 4 : 0.5;
+      const fallback = features.starRating ? (features.starRating - 1) / 4 : 0.5;
+      return isNaN(fallback) ? 0.5 : fallback;
     }
 
     // Calculate relative position
@@ -325,6 +410,11 @@ export class AccommodationVectorizerService {
     // Luxury: >3x average → score 0.9-1.0
 
     const ratio = amount / marketAverage;
+
+    if (isNaN(ratio)) {
+      console.warn(`[AccommodationVectorizer] NaN ratio in budget: amount=${amount}, marketAverage=${marketAverage}`);
+      return 0.5;
+    }
 
     if (ratio < 0.7) {
       // Budget: linear 0-0.3
@@ -371,7 +461,13 @@ export class AccommodationVectorizerService {
     }
 
     const maxScore = Object.values(weights).reduce((sum, w) => sum + w, 0);
-    return Math.min(1.0, score / maxScore);
+
+    if (maxScore === 0 || isNaN(maxScore)) {
+      return 0.5;
+    }
+
+    const result = Math.min(1.0, score / maxScore);
+    return isNaN(result) ? 0.5 : result;
   }
 
   /**
@@ -399,15 +495,25 @@ export class AccommodationVectorizerService {
       if (features.rooms.hasConnectingRooms) score += weights.connectingRooms;
 
       // Max occupancy factor
-      const occupancyScore = Math.min(1, features.rooms.maxOccupancy / 6);
-      score += occupancyScore * weights.maxOccupancy;
+      if (features.rooms.maxOccupancy && !isNaN(features.rooms.maxOccupancy)) {
+        const occupancyScore = Math.min(1, features.rooms.maxOccupancy / 6);
+        if (!isNaN(occupancyScore)) {
+          score += occupancyScore * weights.maxOccupancy;
+        }
+      }
     }
 
     // Family amenities
     if (hasAmenity(amenities, AmenityCategory.KIDS_CLUB)) score += weights.kidsClub;
 
     const maxScore = Object.values(weights).reduce((sum, w) => sum + w, 0);
-    return Math.min(1.0, score / maxScore);
+
+    if (maxScore === 0 || isNaN(maxScore)) {
+      return 0.5;
+    }
+
+    const result = Math.min(1.0, score / maxScore);
+    return isNaN(result) ? 0.5 : result;
   }
 
   /**
@@ -483,7 +589,13 @@ export class AccommodationVectorizerService {
     }
 
     const maxScore = Object.values(weights).reduce((sum, w) => sum + w, 0);
-    return Math.min(1.0, score / maxScore);
+
+    if (maxScore === 0 || isNaN(maxScore)) {
+      return 0.5;
+    }
+
+    const result = Math.min(1.0, score / maxScore);
+    return isNaN(result) ? 0.5 : result;
   }
 
   /**
@@ -499,13 +611,15 @@ export class AccommodationVectorizerService {
     let score = 0;
 
     // Overall rating (0-10 scale from Amadeus)
-    if (features.ratings?.overall) {
+    if (features.ratings?.overall && !isNaN(features.ratings.overall)) {
       const ratingScore = features.ratings.overall / 10;
-      score += ratingScore * weights.overallRating;
+      if (!isNaN(ratingScore)) {
+        score += ratingScore * weights.overallRating;
+      }
     }
 
     // Number of reviews (logarithmic scale)
-    if (features.ratings?.numberOfReviews) {
+    if (features.ratings?.numberOfReviews && !isNaN(features.ratings.numberOfReviews)) {
       const reviewCount = features.ratings.numberOfReviews;
       // 0-10 reviews: 0-0.3, 10-100: 0.3-0.7, 100-1000: 0.7-0.9, >1000: 0.9-1.0
       let reviewScore = 0;
@@ -518,13 +632,18 @@ export class AccommodationVectorizerService {
       } else {
         reviewScore = Math.min(1.0, 0.9 + (Math.log10(reviewCount) - 3) * 0.1);
       }
-      score += reviewScore * weights.numberOfReviews;
+
+      if (!isNaN(reviewScore)) {
+        score += reviewScore * weights.numberOfReviews;
+      }
     }
 
     // Star rating (official classification)
-    if (features.starRating) {
+    if (features.starRating && !isNaN(features.starRating)) {
       const starScore = (features.starRating - 1) / 4; // 1-5 stars → 0-1
-      score += starScore * weights.starRating;
+      if (!isNaN(starScore)) {
+        score += starScore * weights.starRating;
+      }
     }
 
     // Recent renovation bonus
@@ -533,7 +652,14 @@ export class AccommodationVectorizerService {
     }
 
     const maxScore = Object.values(weights).reduce((sum, w) => sum + w, 0);
-    return Math.min(1.0, score / maxScore);
+
+    if (maxScore === 0 || isNaN(maxScore)) {
+      console.warn(`[AccommodationVectorizer] Invalid maxScore in popularity: ${maxScore}`);
+      return 0.5;
+    }
+
+    const result = Math.min(1.0, score / maxScore);
+    return isNaN(result) ? 0.5 : result;
   }
 
   // ============================================================================
@@ -544,7 +670,7 @@ export class AccommodationVectorizerService {
    * Infer location type from hotel data
    */
   private inferLocationType(hotel: any, amenities: Set<AmenityCategory>): LocationType {
-    const address = (hotel.address?.lines?.join(' ') || hotel.address || '').toLowerCase();
+    const address = (hotel.address?.lines?.join(' ') || (typeof hotel.address === 'string' ? hotel.address : '') || '').toLowerCase();
     const name = (hotel.name || '').toLowerCase();
     const description = (hotel.description || '').toLowerCase();
 
@@ -628,6 +754,18 @@ export class AccommodationVectorizerService {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Parse price with NaN protection
+   */
+  private parseValidPrice(value: any): number {
+    const parsed = parseFloat(value);
+    if (isNaN(parsed) || parsed < 0) {
+      console.warn(`[AccommodationVectorizer] Invalid price value: ${value}, using 0`);
+      return 0;
+    }
+    return parsed;
   }
 
   /**

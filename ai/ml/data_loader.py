@@ -160,12 +160,12 @@ def load_from_parquet(dataset_version: str = "1.0") -> pd.DataFrame:
             f"Lancez d'abord le pipeline DR-414 : python scripts/run_etl.py"
         )
 
-    df = pd.read_parquet(parquet_path, columns=["user_id", "itemVectorId", "engagement_score"])
+    df = pd.read_parquet(parquet_path, columns=["user_hash", "itemVectorId", "engagement_score"])
 
     # Exclure les NON_VIEWED (engagement_score == 0) — pas d'information utile
     df = df[df["engagement_score"] != 0].copy()
 
-    df = df.rename(columns={"itemVectorId": "item_id", "engagement_score": "rating"})
+    df = df.rename(columns={"user_hash": "user_id", "itemVectorId": "item_id", "engagement_score": "rating"})
     df = df.dropna(subset=["user_id", "item_id"])
 
     # Agréger si un user a plusieurs interactions sur le même item

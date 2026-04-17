@@ -42,6 +42,19 @@ const recommendationService = new AccommodationRecommendationService();
  * - categories (optional): Comma-separated category codes
  * - limit (optional): Maximum results (default: 20, max: 50)
  * - diversityFactor (optional): MMR lambda (0-1, default: 0.7)
+ *
+ * User Profile Enrichment (optional):
+ * - budgetMin (optional): Minimum budget
+ * - budgetMax (optional): Maximum budget
+ * - currency (optional): Preferred currency
+ * - travelTypes (optional): Comma-separated travel types
+ * - accommodationTypes (optional): Comma-separated accommodation types
+ * - activityTypes (optional): Comma-separated activity types
+ * - preferredDestinations (optional): Comma-separated preferred destinations
+ * - comfortLevel (optional): Comfort level preference
+ * - travelStyle (optional): Travel style preference
+ * - travelGroupType (optional): Travel group type
+ * - activityLevel (optional): Activity level preference
  */
 router.get('/accommodations', async (req: Request, res: Response): Promise<void> => {
   const startTime = Date.now();
@@ -109,6 +122,33 @@ router.get('/accommodations', async (req: Request, res: Response): Promise<void>
       ? (req.query.categories as string).split(',').map(c => c.trim() as AccommodationCategory)
       : undefined;
 
+    // Parse user profile enrichment parameters
+    const budgetMin = req.query.budgetMin ? parseFloat(req.query.budgetMin as string) : undefined;
+    const budgetMax = req.query.budgetMax ? parseFloat(req.query.budgetMax as string) : undefined;
+    const currency = req.query.currency as string | undefined;
+    const travelTypes = req.query.travelTypes
+      ? (req.query.travelTypes as string).split(',').map(t => t.trim())
+      : undefined;
+    const accommodationTypes = req.query.accommodationTypes
+      ? (req.query.accommodationTypes as string).split(',').map(t => t.trim())
+      : undefined;
+    const activityTypes = req.query.activityTypes
+      ? (req.query.activityTypes as string).split(',').map(t => t.trim())
+      : undefined;
+    const preferredDestinations = req.query.preferredDestinations
+      ? (req.query.preferredDestinations as string).split(',').map(d => d.trim())
+      : undefined;
+    const comfortLevel = req.query.comfortLevel as string | undefined;
+    const travelStyle = req.query.travelStyle as string | undefined;
+    const travelGroupType = req.query.travelGroupType as string | undefined;
+    const activityLevel = req.query.activityLevel as string | undefined;
+
+    // Apply budget constraints to maxPrice filter if provided
+    let effectiveMaxPrice = maxPrice;
+    if (!effectiveMaxPrice && budgetMax) {
+      effectiveMaxPrice = budgetMax;
+    }
+
     // Build recommendation options
     const options: RecommendationOptions = {
       userId: userId as string,
@@ -122,7 +162,7 @@ router.get('/accommodations', async (req: Request, res: Response): Promise<void>
       },
       filters: {
         minRating,
-        maxPrice,
+        maxPrice: effectiveMaxPrice,
         requiredAmenities,
         categories,
       },
@@ -132,7 +172,34 @@ router.get('/accommodations', async (req: Request, res: Response): Promise<void>
       },
       diversityFactor,
       includeExplanations: true,
+      userProfile: {
+        budgetMin,
+        budgetMax,
+        currency,
+        travelTypes,
+        accommodationTypes,
+        activityTypes,
+        preferredDestinations,
+        comfortLevel,
+        travelStyle,
+        travelGroupType,
+        activityLevel,
+      },
     };
+
+    // Log user profile data for debugging
+    console.log(`[Accommodations] User profile enrichment:`, {
+      budgetMin,
+      budgetMax,
+      currency,
+      travelTypes,
+      accommodationTypes,
+      activityTypes,
+      comfortLevel,
+      travelStyle,
+      travelGroupType,
+      activityLevel,
+    });
 
     // Get recommendations
     const recommendations = await recommendationService.getRecommendations(options);

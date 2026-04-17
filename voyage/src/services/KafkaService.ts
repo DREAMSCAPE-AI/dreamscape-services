@@ -54,6 +54,7 @@ class VoyageKafkaService {
   async shutdown(): Promise<void> {
     if (this.client) {
       await this.client.disconnect();
+      this.client = null;
       this.isInitialized = false;
       console.log('[VoyageKafkaService] Kafka client disconnected');
     }
