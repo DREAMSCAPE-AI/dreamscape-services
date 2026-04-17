@@ -63,6 +63,9 @@ app.use('/api/v1/ai', onboardingRoutes);
 // Admin routes - US-IA-014
 app.use('/admin', adminRoutes);
 
+// Admin routes - US-IA-014
+app.use('/admin', adminRoutes);
+
 // Health check - INFRA-013.1
 app.use('/health', healthRoutes);
 
