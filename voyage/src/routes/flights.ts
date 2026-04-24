@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import AmadeusService from '@/services/AmadeusService';
-import { FlightOfferMapper } from '@/mappers/FlightOfferMapper';
+import duffelService from '@/services/DuffelService';
+import { duffelToSimplifiedFlights } from '@/adapters/duffel-to-simplified-flights';
 import voyageKafkaService from '@/services/KafkaService';
 
 const router = Router();
@@ -49,11 +50,9 @@ router.get('/search', async (req: Request, res: Response): Promise<void> => {
       max: parseInt(max as string)
     };
 
-    const result = await AmadeusService.searchFlights(searchParams);
-
-    // Map to internal DTOs then simplify for frontend
-    const offers = FlightOfferMapper.mapToDTOs(result.data);
-    const simplified = FlightOfferMapper.mapToSimplifiedList(offers);
+    // ── Duffel (remplace Amadeus) ─────────────────────────────────────────────
+    const duffelOffers = await duffelService.searchFlights(searchParams);
+    const simplified = duffelToSimplifiedFlights(duffelOffers);
 
     // Publish search performed event - DR-402 / DR-404
     voyageKafkaService.publishSearchPerformed({
@@ -73,7 +72,7 @@ router.get('/search', async (req: Request, res: Response): Promise<void> => {
 
     res.json({
       data: simplified,
-      meta: result.meta
+      meta: { count: simplified.length }
     });
   } catch (error) {
     console.error('Flight search error:', error);
@@ -506,12 +505,16 @@ router.post('/availabilities', async (req: Request, res: Response): Promise<void
   }
 });
 
-// Flight Create Orders
+// Flight Create Orders (Duffel)
 router.post('/orders', async (req: Request, res: Response): Promise<void> => {
   try {
-    const orderData = req.body;
-    const result = await AmadeusService.createFlightOrder(orderData);
-    res.json(result);
+    const { offerId, passengers, currency } = req.body;
+    if (!offerId) {
+      res.status(400).json({ error: 'offerId is required' });
+      return;
+    }
+    const result = await duffelService.createFlightOrder({ offerId, passengers: passengers || [], currency });
+    res.json({ data: result });
   } catch (error) {
     console.error('Flight order creation error:', error);
     res.status(500).json({

@@ -182,8 +182,6 @@ export class ActivityMapper {
   }
 
   private static extractTags(activity: any): string[] {
-    const tags: string[] = [];
-    
     if (activity.tags) {
       return Array.isArray(activity.tags) ? activity.tags : [activity.tags];
     }

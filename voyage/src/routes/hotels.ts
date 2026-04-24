@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
-import { ParsedQs } from 'qs';
 import AmadeusService from '@/services/AmadeusService';
+import duffelService from '@/services/DuffelService';
+import { duffelToAmadeusHotels } from '@/adapters/duffel-to-amadeus-hotels';
 import { HotelOfferMapper } from '@/mappers/HotelOfferMapper';
 import { hotelSearchCache, hotelDetailsCache, hotelListCache } from '@/middleware/hotelCache';
 import voyageKafkaService from '@/services/KafkaService';
@@ -121,10 +122,12 @@ router.get('/search', hotelSearchCache, async (req: Request, res: Response): Pro
     searchParams.page = { offset, limit };
 
     try {
-      const result = await AmadeusService.searchHotels(searchParams);
+      // ── Duffel Stays (remplace Amadeus) ──────────────────────────────────────
+      const duffelResults = await duffelService.searchStays(searchParams);
+      const amadeusShape = duffelToAmadeusHotels(duffelResults);
 
       // Map to simplified DTOs for frontend
-      const simplifiedHotels = HotelOfferMapper.mapAmadeusToSimplified(result.data || []);
+      const simplifiedHotels = HotelOfferMapper.mapAmadeusToSimplified(amadeusShape);
 
       // Publish search performed event - DR-402 / DR-404
       voyageKafkaService.publishSearchPerformed({
@@ -198,36 +201,33 @@ router.get('/search', hotelSearchCache, async (req: Request, res: Response): Pro
 router.get('/details/:hotelId', hotelDetailsCache, async (req: Request, res: Response): Promise<void> => {
   try {
     const { hotelId } = req.params;
-    const { adults = '1', roomQuantity = '1', checkInDate, checkOutDate } = req.query;
+    const { adults = '1', checkInDate, checkOutDate } = req.query;
 
     try {
-      // Try to get hotel details using searchHotels API
-      const result = await AmadeusService.searchHotels({
-        hotelIds: hotelId,
+      // ── Duffel Stays details ──────────────────────────────────────────────────
+      const checkIn = checkInDate as string || new Date().toISOString().split('T')[0];
+      const checkOut = checkOutDate as string || new Date(Date.now() + 86400000).toISOString().split('T')[0];
+
+      const duffelResult = await duffelService.getStayDetails(hotelId, {
+        checkInDate: checkIn,
+        checkOutDate: checkOut,
         adults: parseInt(adults as string),
-        roomQuantity: parseInt(roomQuantity as string),
-        checkInDate: checkInDate as string || new Date().toISOString().split('T')[0],
-        checkOutDate: checkOutDate as string || new Date(Date.now() + 86400000).toISOString().split('T')[0]
       });
 
-      if (!result.data || result.data.length === 0) {
-        res.status(404).json({
-          error: 'Hotel not found'
-        });
+      if (!duffelResult) {
+        res.status(404).json({ error: 'Hotel not found' });
         return;
       }
 
-      // Map to simplified DTO
-      const simplifiedHotel = HotelOfferMapper.mapAmadeusToSimplified([result.data[0]])[0];
+      const amadeusShape = duffelToAmadeusHotels([duffelResult]);
+      const simplifiedHotel = HotelOfferMapper.mapAmadeusToSimplified(amadeusShape)[0];
 
       res.json({
         data: simplifiedHotel,
-        meta: result.meta
+        meta: {}
       });
     } catch (apiError: any) {
-      // If hotel offers API fails, return 404 instead of 500
-      // This is expected in test environment where this API may not be fully supported
-      console.warn('Hotel details API error (returning 404):', apiError.message);
+      console.warn('Hotel details error (returning 404):', apiError.message);
       res.status(404).json({
         error: 'Hotel not found or details not available',
         message: 'This hotel may not be available in the current environment'
@@ -337,17 +337,19 @@ router.post('/bookings', async (req: Request, res: Response): Promise<void> => {
       }
     }
 
-    // Create the booking
-    const result = await AmadeusService.createHotelBooking({
-      offerId,
-      guests,
-      payments
+    // ── Duffel Stays booking ──────────────────────────────────────────────────
+    const primaryGuest = guests[0];
+    const result = await duffelService.createStayBooking({
+      rateId: offerId,
+      guestName: `${primaryGuest.name.firstName} ${primaryGuest.name.lastName}`,
+      guestEmail: primaryGuest.contact.email,
+      guestPhone: primaryGuest.contact.phone,
     });
 
     res.status(201).json({
-      data: result.data,
+      data: result,
       meta: {
-        bookingId: result.data?.id,
+        bookingId: result?.id,
         status: 'confirmed'
       }
     });

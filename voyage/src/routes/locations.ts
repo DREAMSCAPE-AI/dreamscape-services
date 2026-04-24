@@ -1,12 +1,13 @@
 import { Router, Request, Response } from 'express';
-import AmadeusService from '@/services/AmadeusService';
+import duffelService from '@/services/DuffelService';
+import { duffelToAmadeusLocations } from '@/adapters/duffel-to-amadeus-locations';
 
 const router = Router();
 
 // Search locations (cities, airports, etc.)
 router.get('/search', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { keyword, subType, countryCode } = req.query;
+    const { keyword, subType } = req.query;
 
     if (!keyword) {
       res.status(400).json({
@@ -15,20 +16,13 @@ router.get('/search', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const searchParams: any = {
-      keyword: keyword as string
-    };
-    
-    // Only add optional parameters if they are provided
-    if (subType) {
-      searchParams.subType = subType as string;
-    }
-    
-    if (countryCode) {
-      searchParams.countryCode = countryCode as string;
-    }
+    // ── Duffel Places (remplace Amadeus) ─────────────────────────────────────
+    const places = await duffelService.searchPlaces(
+      keyword as string,
+      subType as string | undefined
+    );
+    const result = duffelToAmadeusLocations(places, subType as string | undefined);
 
-    const result = await AmadeusService.searchLocations(searchParams);
     res.json(result);
   } catch (error) {
     console.error('Location search error:', error);
@@ -42,7 +36,7 @@ router.get('/search', async (req: Request, res: Response): Promise<void> => {
 // Search airports
 router.get('/airports', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { keyword, subType } = req.query;
+    const { keyword } = req.query;
 
     if (!keyword) {
       res.status(400).json({
@@ -51,10 +45,10 @@ router.get('/airports', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const result = await AmadeusService.searchAirports({ 
-      keyword: keyword as string,
-      subType: subType as string
-    });
+    // ── Duffel Places filtrées sur AIRPORT ────────────────────────────────────
+    const places = await duffelService.searchPlaces(keyword as string, 'AIRPORT');
+    const result = duffelToAmadeusLocations(places, 'AIRPORT');
+
     res.json(result);
   } catch (error) {
     console.error('Airport search error:', error);
