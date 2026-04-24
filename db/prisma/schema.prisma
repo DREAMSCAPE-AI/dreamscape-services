@@ -60,6 +60,9 @@ model User {
   // Notifications (DR-446)
   notifications Notification[]
 
+  // Password reset
+  passwordResets PasswordReset[]
+
   @@map("users")
 }
 
@@ -690,6 +693,18 @@ model TokenBlacklist {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("token_blacklist")
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_resets")
 }
 
 enum Role {
