@@ -2,7 +2,6 @@ import { Router, Request, Response } from 'express';
 import AmadeusService from '@/services/AmadeusService';
 import duffelService from '@/services/DuffelService';
 import { duffelToSimplifiedFlights } from '@/adapters/duffel-to-simplified-flights';
-import { FlightOfferMapper } from '@/mappers/FlightOfferMapper';
 import voyageKafkaService from '@/services/KafkaService';
 
 const router = Router();

@@ -1,5 +1,4 @@
 import { Router, Request, Response } from 'express';
-import { ParsedQs } from 'qs';
 import AmadeusService from '@/services/AmadeusService';
 import duffelService from '@/services/DuffelService';
 import { duffelToAmadeusHotels } from '@/adapters/duffel-to-amadeus-hotels';
@@ -202,7 +201,7 @@ router.get('/search', hotelSearchCache, async (req: Request, res: Response): Pro
 router.get('/details/:hotelId', hotelDetailsCache, async (req: Request, res: Response): Promise<void> => {
   try {
     const { hotelId } = req.params;
-    const { adults = '1', roomQuantity = '1', checkInDate, checkOutDate } = req.query;
+    const { adults = '1', checkInDate, checkOutDate } = req.query;
 
     try {
       // ── Duffel Stays details ──────────────────────────────────────────────────

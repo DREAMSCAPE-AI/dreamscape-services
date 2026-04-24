@@ -34,6 +34,7 @@
     "**/*.test.ts",
     "**/*.spec.ts",
     "src/database/seed.ts",
-    "../db/seed.ts"
+    "../db/seed.ts",
+    "../db/seed_dev.ts"
   ]
 }
