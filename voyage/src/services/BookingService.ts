@@ -8,7 +8,6 @@
 type BookingData = any;
 import prisma from '../database/prisma';
 import CartService from './CartService';
-import { Decimal } from '@prisma/client/runtime/library';
 import voyageKafkaService from './KafkaService';
 import type { VoyageBookingCreatedPayload, VoyageBookingConfirmedPayload } from '@dreamscape/kafka';
 
@@ -20,11 +19,6 @@ interface CreateBookingFromCartDTO {
   userId: string;
   paymentIntentId: string;
   metadata?: Record<string, any>;
-}
-
-interface BookingReference {
-  reference: string;
-  bookingId: string;
 }
 
 export class BookingService {
@@ -209,7 +203,7 @@ export class BookingService {
 
       // Publish booking.confirmed Kafka event
       try {
-        const bookingDataPayload = updatedBooking.data as any;
+        const _bookingDataPayload = updatedBooking.data as any;
         const kafkaPayload: VoyageBookingConfirmedPayload = {
           bookingId: updatedBooking.id,
           userId,

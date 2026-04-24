@@ -299,7 +299,6 @@ router.post('/:reference/confirm', async (req: Request, res: Response): Promise<
     }
 
     const { reference } = req.params;
-    const { paymentIntentId } = req.body;
 
     console.log(`[BookingsRoutes] POST /bookings/${reference}/confirm - User: ${userId}`);
 

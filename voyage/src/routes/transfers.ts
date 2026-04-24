@@ -10,12 +10,6 @@ router.get('/search', async (req: Request, res: Response): Promise<void> => {
       startLocationCode,
       endLocationCode,
       startDateTime,
-      startAddressLine,
-      startCountryCode,
-      startCityName,
-      endAddressLine,
-      endCountryCode,
-      endCityName,
       transferType,
       passengers
     } = req.query;

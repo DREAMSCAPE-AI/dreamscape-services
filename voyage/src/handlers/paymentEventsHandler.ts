@@ -9,12 +9,8 @@ import {
   type PaymentCompletedPayload,
   type PaymentFailedPayload,
 } from '@dreamscape/kafka';
-import prisma from '@/database/prisma';
 import voyageKafkaService from '@/services/KafkaService';
 import BookingService from '@/services/BookingService';
-
-// Booking status types (matching Prisma enum)
-type BookingStatus = 'DRAFT' | 'PENDING_PAYMENT' | 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED' | 'FAILED';
 
 /**
  * Handle payment.completed event
@@ -25,7 +21,7 @@ type BookingStatus = 'DRAFT' | 'PENDING_PAYMENT' | 'PENDING' | 'CONFIRMED' | 'CA
 export const handlePaymentCompleted: MessageHandler<PaymentCompletedPayload> = async (
   event
 ) => {
-  const { paymentId, bookingId, userId, amount, currency, completedAt } = event.payload;
+  const { paymentId, bookingId, userId } = event.payload;
 
   console.log(`[Voyage] Payment completed: ${paymentId} for booking ${bookingId}`);
 
@@ -67,7 +63,7 @@ export const handlePaymentCompleted: MessageHandler<PaymentCompletedPayload> = a
 export const handlePaymentFailed: MessageHandler<PaymentFailedPayload> = async (
   event
 ) => {
-  const { paymentId, bookingId, userId, errorCode, errorMessage, failedAt } = event.payload;
+  const { paymentId, bookingId, userId, errorCode, errorMessage } = event.payload;
 
   console.log(`[Voyage] Payment failed: ${paymentId} for booking ${bookingId} - ${errorMessage}`);
 

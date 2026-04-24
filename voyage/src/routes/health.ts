@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { HealthChecker } from '../../../shared/health/HealthChecker';
 import { ComponentType, HealthStatus } from '../../../shared/health/type';
-import DatabaseService from '../database/DatabaseService';
 import prisma from '../database/prisma';
 
 const router = Router();

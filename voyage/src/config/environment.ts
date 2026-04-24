@@ -10,6 +10,9 @@ export const config = {
     apiSecret: process.env.AMADEUS_API_SECRET!,
     baseUrl: process.env.AMADEUS_BASE_URL || 'https://test.api.amadeus.com'
   },
+  duffel: {
+    apiToken: process.env.DUFFEL_API_TOKEN || ''
+  },
   redis: {
     url: process.env.REDIS_URL || 'redis://localhost:6379',
     enabled: process.env.REDIS_ENABLED !== 'false' // Enable by default
@@ -22,9 +25,9 @@ export const config = {
 };
 
 // Validate required environment variables
-const requiredEnvVars = ['AMADEUS_API_KEY', 'AMADEUS_API_SECRET'];
+const requiredEnvVars = ['AMADEUS_API_KEY', 'AMADEUS_API_SECRET', 'DUFFEL_API_TOKEN'];
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
-    throw new Error(`Missing required environment variable: ${envVar}`);
+    console.warn(`⚠️  Missing environment variable: ${envVar}`);
   }
 }
