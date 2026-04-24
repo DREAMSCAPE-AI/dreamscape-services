@@ -985,3 +985,21 @@ model Notification {
   @@index([userId, read])
   @@map("notifications")
 }
+
+// ========== POPULAR DESTINATIONS ==========
+model PopularDestination {
+  id           Int      @id @default(autoincrement())
+  iataCode     String   @unique
+  cityName     String
+  countryName  String
+  region       String
+  searchCount  Int      @default(0)
+  bookingCount Int      @default(0)
+  averagePrice Float    @default(0)
+  peakSeason   Int[]
+  offSeason    Int[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("popular_destinations")
+}
