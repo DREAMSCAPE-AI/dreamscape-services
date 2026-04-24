@@ -4,7 +4,6 @@
     "module": "commonjs",
     "lib": ["ES2022"],
     "outDir": "./dist",
-    "rootDir": "src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -27,7 +26,7 @@
       "@dreamscape/db": ["../db/index.ts"]
     }
   },
-  "include": ["src/**/*", "../db/**/*", "../shared/**/*"],
+  "include": ["src/**/*", "../db/**/*"],
   "exclude": [
     "node_modules",
     "dist",
