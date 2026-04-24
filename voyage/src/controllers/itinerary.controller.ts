@@ -8,8 +8,6 @@ import {
   UpdateItineraryItemSchema,
   ReorderItemsSchema,
   ExportFormatSchema,
-  type ItineraryResponse,
-  type ItineraryItemResponse
 } from '@/types/itinerary.types';
 import { ItineraryExportService } from '@/services/itinerary.export.service';
 

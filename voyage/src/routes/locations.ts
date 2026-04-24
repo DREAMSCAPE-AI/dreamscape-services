@@ -1,5 +1,4 @@
 import { Router, Request, Response } from 'express';
-import AmadeusService from '@/services/AmadeusService';
 import duffelService from '@/services/DuffelService';
 import { duffelToAmadeusLocations } from '@/adapters/duffel-to-amadeus-locations';
 
@@ -8,7 +7,7 @@ const router = Router();
 // Search locations (cities, airports, etc.)
 router.get('/search', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { keyword, subType, countryCode } = req.query;
+    const { keyword, subType } = req.query;
 
     if (!keyword) {
       res.status(400).json({

@@ -186,7 +186,7 @@ export class ItineraryExportService {
     // TODO: Integrate with actual email service (SendGrid, AWS SES, etc.)
     // For now, we'll generate the HTML template that would be sent
 
-    const htmlContent = this.generateEmailTemplate(itinerary, recipientName);
+    const _htmlContent = this.generateEmailTemplate(itinerary, recipientName);
 
     // In production, you would use an email service like:
     // await emailService.send({
