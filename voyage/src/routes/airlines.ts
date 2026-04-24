@@ -1,19 +1,38 @@
 import { Router, Request, Response } from 'express';
 import AmadeusService from '@/services/AmadeusService';
+import airlinesData from '@/data/airlines-iata.json';
 
 const router = Router();
 
-// Airline Code Lookup
+// Airline Code Lookup — seed file JSON (Amadeus /v1/reference-data/airlines est HS)
 router.get('/lookup', async (req: Request, res: Response): Promise<void> => {
   try {
     const { airlineCodes, IATACode, ICAOCode } = req.query;
 
-    const result = await AmadeusService.lookupAirlineCode({
-      airlineCodes: airlineCodes as string,
-      IATACode: IATACode as string,
-      ICAOCode: ICAOCode as string
+    const codes = (
+      airlineCodes as string ||
+      IATACode as string ||
+      ICAOCode as string ||
+      ''
+    )
+      .split(',')
+      .map(c => c.trim().toUpperCase())
+      .filter(Boolean);
+
+    if (codes.length === 0) {
+      res.json({ data: airlinesData });
+      return;
+    }
+
+    const found = airlinesData.filter((a: any) =>
+      codes.includes(a.iataCode?.toUpperCase() || '') ||
+      codes.includes(a.icaoCode?.toUpperCase() || '')
+    );
+
+    res.json({
+      data: found,
+      meta: { count: found.length }
     });
-    res.json(result);
   } catch (error) {
     console.error('Airline lookup error:', error);
     res.status(500).json({
@@ -23,7 +42,7 @@ router.get('/lookup', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// Airline Routes
+// Airline Routes (orphaned - kept for compatibility, returns empty)
 router.get('/routes', async (req: Request, res: Response): Promise<void> => {
   try {
     const { airlineCode, max } = req.query;
