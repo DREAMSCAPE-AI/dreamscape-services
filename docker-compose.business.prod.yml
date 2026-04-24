@@ -62,6 +62,7 @@ services:
       DATABASE_URL: postgresql://dreamscape:dreamscape_secure_password@business-db:5432/dreamscape_business?schema=voyage
       AMADEUS_API_KEY: ${AMADEUS_API_KEY:-test-key}
       AMADEUS_API_SECRET: ${AMADEUS_API_SECRET:-test-secret}
+      DUFFEL_API_TOKEN: ${DUFFEL_API_TOKEN:-}
     depends_on:
       business-db:
         condition: service_healthy
